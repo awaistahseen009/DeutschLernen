@@ -4,6 +4,9 @@ import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
+// Server-side in-memory dictionary lookup cache
+const dictCache = new Map<string, any>();
+
 export async function generateReadingPassage(topic: string, vocabList: string[]) {
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const prompt = `
@@ -130,59 +133,80 @@ Return ONLY a valid JSON object with:
 }
 
 export async function lookupWordContext(word: string, contextSentence?: string) {
+  const cleanWord = word.trim().toLowerCase();
+  const cacheKey = `${cleanWord}_${contextSentence?.slice(0, 30) || 'default'}`;
+
+  // Check in-memory server cache for instant 0ms response
+  if (dictCache.has(cacheKey)) {
+    return dictCache.get(cacheKey);
+  }
+
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const prompt = `
-Analyze the German word "${word}" ${contextSentence ? `in sentence context: "${contextSentence}"` : ''}.
-Return ONLY a valid JSON object:
+Provide the English translation and dictionary definition for the German word or phrase: "${word}".
+${contextSentence ? `Sentence Context: "${contextSentence}"` : ''}
+
+You MUST return ONLY a valid JSON object with exact schema:
 {
   "word": "${word}",
-  "partOfSpeech": "noun / verb / adjective / connector",
-  "article": "der / die / das or null",
-  "englishTranslation": "Primary English meaning",
-  "germanDefinition": "Simple German definition or explanation",
-  "grammarNote": "Useful grammar tip (e.g. case, preposition, conjugation)",
-  "exampleSentence": "A natural German example sentence showing usage"
+  "partOfSpeech": "Noun / Verb / Adjective / Preposition / Expression",
+  "article": "der / die / das (if noun, else null)",
+  "englishTranslation": "Clear direct English translation",
+  "germanDefinition": "Simple German explanation of meaning",
+  "grammarNote": "Brief grammar tip (e.g. case, gender, conjugation)",
+  "exampleSentence": "Short German example sentence with English translation"
 }
 `;
 
   try {
     const result = await model.generateContent(prompt);
     const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanText);
+    const data = JSON.parse(cleanText);
+
+    if (data.englishTranslation) {
+      dictCache.set(cacheKey, data);
+      return data;
+    }
+    throw new Error('Incomplete dictionary object');
   } catch (err) {
-    return {
+    console.warn('Gemini lookupWordContext fallback:', err);
+    const fallbackObj = {
       word,
       partOfSpeech: 'Wort',
       article: null,
-      englishTranslation: 'Meaning in context',
-      germanDefinition: `Bedeutung von "${word}" im Kontext`,
-      grammarNote: 'In Kontext gebraucht.',
-      exampleSentence: `Das Wort "${word}" ist sehr gebräuchlich im Deutschen.`
+      englishTranslation: `${word} (English translation)`,
+      germanDefinition: `Bedeutung von "${word}" im Deutschen`,
+      grammarNote: 'Im deutschen Sprachgebrauch.',
+      exampleSentence: `Das Wort "${word}" wird oft verwendet.`
     };
+    dictCache.set(cacheKey, fallbackObj);
+    return fallbackObj;
   }
 }
 
 export async function chatWithBot(userMessage: string, selectedWord?: string) {
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const prompt = `
-You are "DeutschMeister Tutor", an encouraging, highly knowledgeable German language AI assistant.
-User message: "${userMessage}"
-${selectedWord ? `The user asked specifically about the German word "${selectedWord}".` : ''}
+You are "DeutschMeister AI Tutor", an intelligent, highly engaging German language tutor.
+User Message: "${userMessage}"
+${selectedWord ? `The user clicked on the word "${selectedWord}" to ask about it.` : ''}
 
-Respond in friendly, natural German with English translations for complex phrases. Keep explanations clear, helpful, and concise.
+CRITICAL INSTRUCTIONS:
+- Answer the user's specific query naturally in friendly German (include concise English translations for complex phrases).
+- Do NOT repeat fixed template strings.
+- Answer directly and conversationally.
 `;
 
   try {
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    if (text) return text;
-    throw new Error('Empty response');
-  } catch (err) {
-    console.error('Gemini chatWithBot error:', err);
-    if (userMessage.toLowerCase().includes('lernen') || userMessage.toLowerCase().includes('deutsch')) {
-      return 'Das ist ein fantastisches Ziel! Deutsch zu lernen erfordert regelmäßige Übung beim Lesen, Sprechen und Wortschatzaufbau. Wie kann ich dich heute am besten unterstützen?';
+    const responseText = result.response.text();
+    if (responseText && responseText.trim().length > 0) {
+      return responseText.trim();
     }
-    return `Sehr gerne! Zu deiner Nachricht: "${userMessage}". Ich helfe dir dabei, Grammatik, Wortschatz und Beispielsätze Schritt für Schritt zu verstehen. Hast du eine bestimmte Frage dazu?`;
+    throw new Error('Empty response from Gemini');
+  } catch (err: any) {
+    console.error('Gemini chatWithBot error:', err);
+    return `Sehr gerne! Zu deiner Frage: "${userMessage}". Ich helfe dir dabei, die deutsche Grammatik und den Wortschatz Schritt für Schritt zu meistern. Was möchtest du als Nächstes üben?`;
   }
 }
 
@@ -277,7 +301,6 @@ Return ONLY a valid JSON object with schema:
 }
 
 export async function generateVocabFromYoutubeTranscript(videoUrl: string, manualTranscript?: string) {
-  // First, attempt to fetch 100% full, official German transcript from YouTube timedtext
   let officialTranscript = manualTranscript?.trim() || await fetchFullYoutubeTranscript(videoUrl);
 
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });

@@ -14,7 +14,8 @@ import {
   ChevronLeft, 
   Sparkles,
   Award,
-  Gauge
+  Gauge,
+  Highlighter
 } from 'lucide-react';
 import { speakTextWithCache } from '@/lib/tts';
 
@@ -27,6 +28,19 @@ interface VocabTabProps {
   onSelectVocab: (item: VocabItem) => void;
   selectedVoiceURI: string;
 }
+
+interface HoverTooltip {
+  word: string;
+  partOfSpeech?: string;
+  translation?: string;
+  definition?: string;
+  grammarNote?: string;
+  x: number;
+  y: number;
+}
+
+// Client-side dictionary cache for 0ms hover latency
+const clientDictCache = new Map<string, any>();
 
 export const VocabTab: React.FC<VocabTabProps> = ({
   vocabList,
@@ -43,6 +57,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
   const [quizScore, setQuizScore] = useState<number | null>(null);
   const [userQuizAnswers, setUserQuizAnswers] = useState<Record<number, number>>({});
   const [speechRate, setSpeechRate] = useState<number>(1.0);
+  const [hoverTooltip, setHoverTooltip] = useState<HoverTooltip | null>(null);
 
   const categories = ['ALL', ...Array.from(new Set(vocabList.map(v => v.category)))];
 
@@ -78,6 +93,79 @@ export const VocabTab: React.FC<VocabTabProps> = ({
     }
   };
 
+  // Hover or Text Selection Lookup with 0ms Client Cache
+  const handleWordHover = async (e: React.MouseEvent<HTMLSpanElement>, cleanWord: string, context?: string) => {
+    if (!cleanWord || cleanWord.length < 2) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cacheKey = cleanWord.toLowerCase();
+
+    if (clientDictCache.has(cacheKey)) {
+      const cached = clientDictCache.get(cacheKey);
+      setHoverTooltip({
+        word: cleanWord,
+        partOfSpeech: cached.partOfSpeech,
+        translation: cached.englishTranslation,
+        definition: cached.germanDefinition,
+        grammarNote: cached.grammarNote,
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY - 85
+      });
+      return;
+    }
+
+    setHoverTooltip({
+      word: cleanWord,
+      translation: 'Lädt Übersetzung...',
+      x: rect.left + window.scrollX,
+      y: rect.top + window.scrollY - 85
+    });
+
+    try {
+      const res = await fetch('/api/dictionary/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word: cleanWord, contextSentence: context })
+      });
+      const data = await res.json();
+      clientDictCache.set(cacheKey, data);
+
+      setHoverTooltip({
+        word: cleanWord,
+        partOfSpeech: data.partOfSpeech,
+        translation: data.englishTranslation,
+        definition: data.germanDefinition,
+        grammarNote: data.grammarNote,
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY - 85
+      });
+    } catch (err) {
+      setHoverTooltip(null);
+    }
+  };
+
+  const renderInteractiveText = (text: string, context?: string) => {
+    if (!text) return null;
+    const words = text.split(/(\s+)/);
+
+    return words.map((chunk, idx) => {
+      if (/^\s+$/.test(chunk)) return <span key={idx}>{chunk}</span>;
+      const cleanWord = chunk.replace(/[.,/#!$%^&*;:{}=\-_`~()"?]/g, '');
+
+      return (
+        <span
+          key={idx}
+          onMouseEnter={(e) => handleWordHover(e, cleanWord, context)}
+          onMouseLeave={() => setHoverTooltip(null)}
+          className="hover-word"
+          title="Hover: Übersetzung anzeigen"
+        >
+          {chunk}
+        </span>
+      );
+    });
+  };
+
   if (!currentItem) {
     return <div className="p-8 text-center text-charcoal-900 font-serif text-lg">Keine Wörter gefunden.</div>;
   }
@@ -98,13 +186,29 @@ export const VocabTab: React.FC<VocabTabProps> = ({
   const speeds = [0.5, 0.75, 1.0, 1.25, 1.5];
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-12">
+    <div className="space-y-6 max-w-4xl mx-auto pb-12 relative">
+      {/* Floating Hover Tooltip showing English Translation + German Context */}
+      {hoverTooltip && (
+        <div 
+          style={{ top: `${hoverTooltip.y}px`, left: `${hoverTooltip.x}px` }}
+          className="fixed z-50 bg-cream-900 text-cream-50 p-3.5 rounded-2xl shadow-2xl border border-gold-500/40 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 transition-opacity"
+        >
+          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1">
+            <strong className="text-gold-400 font-serif text-sm">{hoverTooltip.word}</strong>
+            {hoverTooltip.partOfSpeech && <span className="text-[10px] text-cream-300 uppercase">{hoverTooltip.partOfSpeech}</span>}
+          </div>
+          <div className="text-cream-50 font-bold text-sm mb-1">{hoverTooltip.translation}</div>
+          {hoverTooltip.definition && <div className="text-[11px] text-cream-200 italic">{hoverTooltip.definition}</div>}
+          {hoverTooltip.grammarNote && <div className="text-[10px] text-gold-400/80 mt-1">{hoverTooltip.grammarNote}</div>}
+        </div>
+      )}
+
       {/* Top Banner & Category Chips */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-cream-50 p-6 rounded-3xl border border-cream-300/80 shadow-soft">
         <div>
           <span className="text-xs font-semibold text-gold-700 uppercase tracking-widest">Wortschatz, Verben & Nomen</span>
           <h2 className="font-serif text-3xl font-bold text-charcoal-900 mt-1">Lernkarten</h2>
-          <p className="text-xs text-cream-800 mt-1">Lerne Wörter mit 5 Beispielsätzen (Kasus & Tenses) & Grammatik-Seitenleiste.</p>
+          <p className="text-xs text-cream-800 mt-1">Bewege die Maus über ein Wort für Übersetzung, Definition & Grammatik-Seitenleiste.</p>
         </div>
 
         {/* Speed Rate Control Toggle */}
@@ -219,13 +323,13 @@ export const VocabTab: React.FC<VocabTabProps> = ({
           </button>
         </div>
 
-        {/* 5 Sentence Options with Voice Buttons & Cached Speed Controls */}
+        {/* 5 Sentence Options with Hover Translation & Voice Buttons */}
         <div className="space-y-3 pt-6 border-t border-cream-200">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs font-bold text-charcoal-900 uppercase tracking-wider flex items-center gap-2">
-              <Sparkles size={14} className="text-gold-600" /> 5 Beispielsätze (Tenses / Kasus Formate)
+              <Sparkles size={14} className="text-gold-600" /> 5 Beispielsätze (Hover über ein Wort für Übersetzung)
             </div>
-            <span className="text-[10px] font-semibold text-cream-800 italic">Tempo: {speechRate}x (In-Memory Audio Caching)</span>
+            <span className="text-[10px] font-semibold text-cream-800 italic">Tempo: {speechRate}x (Cached)</span>
           </div>
 
           {currentItem.sentences.map((sent: SentenceExample, idx: number) => (
@@ -238,7 +342,9 @@ export const VocabTab: React.FC<VocabTabProps> = ({
                   <span className="text-[10px] font-bold px-2 py-0.5 bg-cream-900 text-gold-400 rounded-md uppercase tracking-wider">
                     {sent.tenseOrCase}
                   </span>
-                  <p className="text-sm font-semibold text-charcoal-900">{sent.german}</p>
+                  <p className="text-sm font-semibold text-charcoal-900">
+                    {renderInteractiveText(sent.german, sent.german)}
+                  </p>
                 </div>
                 <p className="text-xs text-cream-800 italic pl-1">{sent.english}</p>
               </div>
@@ -271,7 +377,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
 
           <button
             onClick={handleNextCard}
-            className="px-5 py-2.5 bg-cream-900 hover:bg-charcoal-900 text-gold-400 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md transition-colors"
+            className="px-5 py-2.5 bg-cream-900 hover:bg-charcoal-900 text-gold-400 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md transition-colors font-bold"
           >
             Nächste Karte <ChevronRight size={16} />
           </button>
@@ -303,7 +409,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
                     setIsQuizModalOpen(false);
                     setQuizScore(null);
                   }}
-                  className="px-6 py-3 bg-cream-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md hover:bg-charcoal-900 transition-colors"
+                  className="px-6 py-3 bg-cream-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md hover:bg-charcoal-900 transition-colors font-bold"
                 >
                   Weiterlernen
                 </button>
