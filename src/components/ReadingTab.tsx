@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Newspaper, 
   Sparkles, 
@@ -10,8 +10,10 @@ import {
   Bot, 
   CheckCircle,
   Award,
-  Loader2
+  Loader2,
+  Volume2
 } from 'lucide-react';
+import { speakTextWithCache } from '@/lib/tts';
 
 interface ReadingTabProps {
   onWordLeftClick: (word: string) => void;
@@ -35,6 +37,8 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
   const [gradingResult, setGradingResult] = useState<any>(null);
   const [isGrading, setIsGrading] = useState<boolean>(false);
   const [hoverTooltip, setHoverTooltip] = useState<HoverTooltip | null>(null);
+
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const topics = ['Nachrichten', 'Sport', 'Unterhaltung', 'Politik', 'Technologie', 'Alltag'];
 
@@ -64,10 +68,11 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
   // Hover word lookup with viewport positioning right above word
   const handleWordHover = async (e: React.MouseEvent<HTMLSpanElement>, cleanWord: string) => {
     if (!cleanWord || cleanWord.length < 2) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
 
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.max(120, Math.min(window.innerWidth - 120, rect.left + (rect.width / 2)));
-    const y = Math.max(10, rect.top - 6);
+    const y = Math.max(10, rect.top - 4);
 
     setHoverTooltip({
       word: cleanWord,
@@ -99,7 +104,9 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
   };
 
   const handleWordMouseLeave = () => {
-    setHoverTooltip(null);
+    hoverTimerRef.current = setTimeout(() => {
+      setHoverTooltip(null);
+    }, 250);
   };
 
   const handleSubmitAnswers = async () => {
@@ -149,16 +156,34 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12 relative">
-      {/* Floating Hover Tooltip right above word */}
+      {/* Interactive Clickable Floating Hover Tooltip right above word */}
       {hoverTooltip && (
         <div 
+          onMouseEnter={() => {
+            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          }}
+          onMouseLeave={() => setHoverTooltip(null)}
           style={{ top: `${hoverTooltip.y}px`, left: `${hoverTooltip.x}px` }}
-          className="fixed z-50 bg-cream-900 text-cream-50 p-2.5 rounded-2xl shadow-2xl border border-gold-500/50 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all"
+          className="fixed z-50 bg-cream-900 text-cream-50 p-3 rounded-2xl shadow-2xl border border-gold-500/50 text-xs max-w-xs transform -translate-x-1/2 -translate-y-full transition-all cursor-default"
         >
-          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1 gap-2">
-            <strong className="text-gold-400 font-serif text-sm">{hoverTooltip.word}</strong>
-            {hoverTooltip.partOfSpeech && <span className="text-[10px] text-cream-300 uppercase">{hoverTooltip.partOfSpeech}</span>}
+          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1.5 gap-3">
+            <div className="flex items-center gap-1.5">
+              <strong className="text-gold-400 font-serif text-base">{hoverTooltip.word}</strong>
+              <button
+                onClick={() => speakTextWithCache(hoverTooltip.word)}
+                className="p-1 bg-cream-800 hover:bg-gold-500 hover:text-charcoal-900 text-gold-400 rounded-lg transition-colors"
+                title="Aussprache abspielen"
+              >
+                <Volume2 size={14} />
+              </button>
+            </div>
+            {hoverTooltip.partOfSpeech && (
+              <span className="text-[10px] bg-cream-800 text-gold-300 px-2 py-0.5 rounded uppercase font-bold">
+                {hoverTooltip.partOfSpeech}
+              </span>
+            )}
           </div>
+
           <div className="text-cream-50 font-bold text-sm mb-0.5">{hoverTooltip.translation}</div>
           {hoverTooltip.grammarNote && <div className="text-[11px] text-cream-300 italic">{hoverTooltip.grammarNote}</div>}
           <div className="text-[10px] text-gold-400/80 mt-1">Links-Klick zum Chatten mit KI-Tutor</div>

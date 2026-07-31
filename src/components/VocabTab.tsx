@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   VocabItem, 
   SentenceExample 
@@ -57,6 +57,8 @@ export const VocabTab: React.FC<VocabTabProps> = ({
   const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [hoverTooltip, setHoverTooltip] = useState<HoverTooltip | null>(null);
 
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const categories = ['ALL', ...Array.from(new Set(vocabList.map(v => v.category)))];
 
   const filteredVocab = selectedCategory === 'ALL' 
@@ -91,16 +93,17 @@ export const VocabTab: React.FC<VocabTabProps> = ({
     }
   };
 
-  // Hover Lookup with viewport positioning closer right above word
+  // Hover Lookup with viewport positioning right above word
   const handleWordHover = async (e: React.MouseEvent<HTMLSpanElement>, cleanWord: string, context?: string) => {
     if (!cleanWord || cleanWord.length < 2) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
 
     const rect = e.currentTarget.getBoundingClientRect();
     const cacheKey = cleanWord.toLowerCase();
 
-    // Fixed Viewport Position closer right above the hovered word
+    // Fixed Viewport Position right above the hovered word with seamless gap
     const x = Math.max(120, Math.min(window.innerWidth - 120, rect.left + (rect.width / 2)));
-    const y = Math.max(10, rect.top - 42);
+    const y = Math.max(10, rect.top - 4);
 
     if (clientDictCache.has(cacheKey)) {
       const cached = clientDictCache.get(cacheKey);
@@ -146,6 +149,12 @@ export const VocabTab: React.FC<VocabTabProps> = ({
     }
   };
 
+  const handleMouseLeaveWord = () => {
+    hoverTimerRef.current = setTimeout(() => {
+      setHoverTooltip(null);
+    }, 250);
+  };
+
   const renderInteractiveText = (text: string, context?: string) => {
     if (!text) return null;
     const words = text.split(/(\s+)/);
@@ -158,7 +167,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
         <span
           key={idx}
           onMouseEnter={(e) => handleWordHover(e, cleanWord, context)}
-          onMouseLeave={() => setHoverTooltip(null)}
+          onMouseLeave={handleMouseLeaveWord}
           className="hover-word"
         >
           {chunk}
@@ -188,18 +197,43 @@ export const VocabTab: React.FC<VocabTabProps> = ({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12 relative">
-      {/* Floating Hover Tooltip close above the word */}
+      {/* Interactive Clickable Floating Hover Tooltip directly above the word */}
       {hoverTooltip && (
         <div 
+          onMouseEnter={() => {
+            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          }}
+          onMouseLeave={() => setHoverTooltip(null)}
           style={{ top: `${hoverTooltip.y}px`, left: `${hoverTooltip.x}px` }}
-          className="fixed z-50 bg-cream-900 text-cream-50 p-2.5 rounded-2xl shadow-2xl border border-gold-500/50 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all"
+          className="fixed z-50 bg-cream-900 text-cream-50 p-3 rounded-2xl shadow-2xl border border-gold-500/50 text-xs max-w-xs transform -translate-x-1/2 -translate-y-full transition-all cursor-default"
         >
-          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1 gap-2">
-            <strong className="text-gold-400 font-serif text-sm">{hoverTooltip.word}</strong>
-            {hoverTooltip.partOfSpeech && <span className="text-[10px] text-cream-300 uppercase">{hoverTooltip.partOfSpeech}</span>}
+          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1.5 gap-3">
+            <div className="flex items-center gap-1.5">
+              <strong className="text-gold-400 font-serif text-base">{hoverTooltip.word}</strong>
+              <button
+                onClick={() => playSpeech(hoverTooltip.word)}
+                className="p-1 bg-cream-800 hover:bg-gold-500 hover:text-charcoal-900 text-gold-400 rounded-lg transition-colors"
+                title="Aussprache abspielen"
+              >
+                <Volume2 size={14} />
+              </button>
+            </div>
+            {hoverTooltip.partOfSpeech && (
+              <span className="text-[10px] bg-cream-800 text-gold-300 px-2 py-0.5 rounded uppercase font-bold">
+                {hoverTooltip.partOfSpeech}
+              </span>
+            )}
           </div>
-          <div className="text-cream-50 font-bold text-sm mb-0.5">{hoverTooltip.translation}</div>
-          {hoverTooltip.definition && <div className="text-[11px] text-cream-200 italic">{hoverTooltip.definition}</div>}
+
+          <div className="text-cream-50 font-bold text-sm mb-1">
+            {hoverTooltip.translation}
+          </div>
+
+          {hoverTooltip.definition && (
+            <div className="text-[11px] text-cream-200 italic leading-snug">
+              {hoverTooltip.definition}
+            </div>
+          )}
         </div>
       )}
 
@@ -208,7 +242,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
         <div>
           <span className="text-xs font-semibold text-gold-700 uppercase tracking-widest">Wortschatz, Verben & Nomen</span>
           <h2 className="font-serif text-3xl font-bold text-charcoal-900 mt-1">Lernkarten</h2>
-          <p className="text-xs text-cream-800 mt-1">Bewege die Maus über ein Wort für Übersetzung, Definition & Grammatik-Seitenleiste.</p>
+          <p className="text-xs text-cream-800 mt-1">Bewege die Maus über ein Wort für Übersetzung, Audio & Grammatik-Seitenleiste.</p>
         </div>
 
         {/* Speed Rate Control Toggle */}
@@ -327,7 +361,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
         <div className="space-y-3 pt-6 border-t border-cream-200">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs font-bold text-charcoal-900 uppercase tracking-wider flex items-center gap-2">
-              <Sparkles size={14} className="text-gold-600" /> 5 Beispielsätze (Hover über ein Wort für Übersetzung)
+              <Sparkles size={14} className="text-gold-600" /> 5 Beispielsätze (Hover über ein Wort für Übersetzung & Audio)
             </div>
             <span className="text-[10px] font-semibold text-cream-800 italic">Tempo: {speechRate}x (Cached)</span>
           </div>
