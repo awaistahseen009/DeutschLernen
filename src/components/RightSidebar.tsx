@@ -7,7 +7,7 @@ import {
   ChevronLeft, 
   BookMarked, 
   Sparkles,
-  RefreshCw,
+  Loader2,
   X,
   Grid
 } from 'lucide-react';
@@ -44,12 +44,12 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Switch to chatbot and populate prompt if a word is clicked
+  // Switch to chatbot and populate prompt if a word is left-clicked
   useEffect(() => {
     if (chatbotPromptWord) {
       setActiveRightTab('chatbot');
       setIsOpen(true);
-      handleSendMessage(`Erkläre mir bitte das Wort "${chatbotPromptWord}" und zeige 2 Beispielsätze.`);
+      handleSendMessage(`Erkläre mir bitte das Wort "${chatbotPromptWord}" und zeige 2 Beispielsätze.`, chatbotPromptWord);
     }
   }, [chatbotPromptWord]);
 
@@ -68,7 +68,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string, wordContext?: string) => {
     const text = textToSend || inputText;
     if (!text.trim()) return;
 
@@ -81,7 +81,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       const res = await fetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userMessage: text, selectedWord: chatbotPromptWord })
+        body: JSON.stringify({ 
+          userMessage: text, 
+          selectedWord: wordContext // Only pass selectedWord when triggered by a word click
+        })
       });
       const data = await res.json();
 
@@ -296,7 +299,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               ))}
               {isLoading && (
                 <div className="bg-cream-50 p-3 rounded-2xl text-xs text-cream-800 border border-cream-300/70 flex items-center gap-2">
-                  <RefreshCw size={14} className="animate-spin text-gold-600" />
+                  <Loader2 size={16} className="animate-spin text-gold-600" />
                   <span>Der Tutor denkt nach...</span>
                 </div>
               )}
@@ -316,9 +319,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 <button
                   onClick={() => handleSendMessage()}
                   disabled={isLoading || !inputText.trim()}
-                  className="p-2.5 bg-cream-900 hover:bg-charcoal-900 text-gold-400 disabled:opacity-50 rounded-xl transition-colors"
+                  className="p-2.5 bg-cream-900 hover:bg-charcoal-900 text-gold-400 disabled:opacity-50 rounded-xl transition-colors flex items-center justify-center"
                 >
-                  <Send size={15} />
+                  {isLoading ? <Loader2 size={15} className="animate-spin text-gold-400" /> : <Send size={15} />}
                 </button>
               </div>
             </div>

@@ -9,7 +9,8 @@ import {
   HelpCircle, 
   Bot, 
   CheckCircle,
-  Award
+  Award,
+  Loader2
 } from 'lucide-react';
 
 interface ReadingTabProps {
@@ -66,7 +67,6 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
 
     const rect = e.currentTarget.getBoundingClientRect();
     
-    // Set immediate position placeholder
     setHoverTooltip({
       word: cleanWord,
       translation: 'Lädt Übersetzung...',
@@ -178,8 +178,8 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
           disabled={isLoading}
           className="px-5 py-3 bg-cream-900 hover:bg-charcoal-900 text-gold-400 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md transition-all border border-gold-500/30"
         >
-          <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
-          Neuen Text Generieren
+          {isLoading ? <Loader2 size={16} className="animate-spin text-gold-400" /> : <RefreshCw size={16} />}
+          <span>Neuen Text Generieren</span>
         </button>
       </div>
 
@@ -207,7 +207,7 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
       {/* Passage Display Card */}
       {isLoading ? (
         <div className="bg-cream-50 rounded-3xl border border-cream-300 p-12 text-center space-y-3">
-          <RefreshCw size={32} className="animate-spin text-gold-600 mx-auto" />
+          <Loader2 size={36} className="animate-spin text-gold-600 mx-auto" />
           <h3 className="font-serif font-bold text-xl text-charcoal-900">Gemini generiert einen aktuellen Text...</h3>
           <p className="text-xs text-cream-800">Aktuelle Themen aus {topic} werden mit reichhaltigem Wortschatz strukturiert.</p>
         </div>
@@ -246,7 +246,7 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   {q.options?.map((opt: string, oIdx: number) => {
-                    const optKey = String.fromCharCode(65 + oIdx); // 'A', 'B', 'C', 'D'
+                    const optKey = String.fromCharCode(65 + oIdx);
                     const isSelected = userAnswers[q.id || `q${qIdx + 1}`] === optKey;
 
                     return (
@@ -294,8 +294,8 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
               disabled={isGrading || Object.keys(userAnswers).length === 0}
               className="w-full py-4 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md disabled:opacity-50 transition-colors flex items-center justify-center gap-2 border border-gold-500/30"
             >
-              {isGrading ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-              Antworten von KI Bewerten & In Datenbank Speichern
+              {isGrading ? <Loader2 size={16} className="animate-spin text-gold-400" /> : <CheckCircle2 size={16} />}
+              <span>Antworten von KI Bewerten & In Datenbank Speichern</span>
             </button>
           </div>
         </div>

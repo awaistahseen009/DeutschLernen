@@ -1,16 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Mic, 
-  MicOff,
+  MicOff, 
   PenTool, 
   Headphones, 
   Volume2, 
   CheckCircle2, 
   RefreshCw, 
-  Award,
-  Sparkles
+  Award, 
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 
 interface ExercisesTabProps {
@@ -241,8 +242,9 @@ export const ExercisesTab: React.FC<ExercisesTabProps> = ({ selectedVoiceURI }) 
           </div>
 
           {isListeningMicrophone && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold animate-pulse text-center">
-              🎙️ Sprich jetzt auf Deutsch... Deine Stimme wird erkannt!
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold animate-pulse text-center flex items-center justify-center gap-2">
+              <Mic size={16} className="text-rose-600 animate-bounce" />
+              <span>Sprich jetzt auf Deutsch... Deine Stimme wird erkannt!</span>
             </div>
           )}
 
@@ -271,7 +273,7 @@ export const ExercisesTab: React.FC<ExercisesTabProps> = ({ selectedVoiceURI }) 
             ))}
             {isSpeakingLoading && (
               <div className="text-xs text-cream-800 italic flex items-center gap-2 p-2">
-                <RefreshCw size={14} className="animate-spin text-gold-600" /> KI Partner antwortet...
+                <Loader2 size={16} className="animate-spin text-gold-600" /> KI Partner antwortet...
               </div>
             )}
           </div>
@@ -288,9 +290,10 @@ export const ExercisesTab: React.FC<ExercisesTabProps> = ({ selectedVoiceURI }) 
             <button
               onClick={() => handleSendSpeaking()}
               disabled={isSpeakingLoading || !speakingInput.trim()}
-              className="px-6 py-3 bg-cream-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md hover:bg-charcoal-900 transition-colors border border-gold-500/30"
+              className="px-6 py-3 bg-cream-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md hover:bg-charcoal-900 transition-colors border border-gold-500/30 flex items-center gap-2"
             >
-              Senden
+              {isSpeakingLoading ? <Loader2 size={14} className="animate-spin text-gold-400" /> : null}
+              <span>Senden</span>
             </button>
           </div>
         </div>
@@ -341,8 +344,8 @@ export const ExercisesTab: React.FC<ExercisesTabProps> = ({ selectedVoiceURI }) 
             disabled={isWritingLoading || !userWritingText.trim()}
             className="w-full py-4 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md transition-colors flex items-center justify-center gap-2 border border-gold-500/30"
           >
-            {isWritingLoading ? <RefreshCw size={16} className="animate-spin" /> : <PenTool size={16} />}
-            Text von KI Bewerten & In Datenbank Speichern
+            {isWritingLoading ? <Loader2 size={16} className="animate-spin text-gold-400" /> : <PenTool size={16} />}
+            <span>Text von KI Bewerten & In Datenbank Speichern</span>
           </button>
 
           {/* Writing Grading Result */}
@@ -387,8 +390,8 @@ export const ExercisesTab: React.FC<ExercisesTabProps> = ({ selectedVoiceURI }) 
               disabled={isListeningLoading}
               className="px-5 py-3 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md transition-colors flex items-center gap-2 border border-gold-500/30"
             >
-              <RefreshCw size={16} className={isListeningLoading ? 'animate-spin' : ''} />
-              Neuen Hör-Dialog Generieren
+              {isListeningLoading ? <Loader2 size={16} className="animate-spin text-gold-400" /> : <RefreshCw size={16} />}
+              <span>Neuen Hör-Dialog Generieren</span>
             </button>
           </div>
 
@@ -401,7 +404,7 @@ export const ExercisesTab: React.FC<ExercisesTabProps> = ({ selectedVoiceURI }) 
 
           {isListeningLoading && (
             <div className="p-8 text-center space-y-2">
-              <RefreshCw size={28} className="animate-spin text-gold-600 mx-auto" />
+              <Loader2 size={32} className="animate-spin text-gold-600 mx-auto" />
               <p className="text-xs font-semibold text-charcoal-900">Gemini erstellt ein natürliches Gespräch & 15 Fragen...</p>
             </div>
           )}
@@ -476,7 +479,7 @@ export const ExercisesTab: React.FC<ExercisesTabProps> = ({ selectedVoiceURI }) 
                   <button
                     onClick={submitListeningQuiz}
                     disabled={Object.keys(userListeningAnswers).length < 15}
-                    className="w-full py-4 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md disabled:opacity-50 transition-colors border border-gold-500/30"
+                    className="w-full py-4 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md disabled:opacity-50 transition-colors border border-gold-500/30 font-bold"
                   >
                     15 Fragen Auswerten & Speichern
                   </button>

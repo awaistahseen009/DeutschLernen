@@ -10,26 +10,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User message required' }, { status: 400 });
     }
 
-    // Query past memories from Pinecone
-    const pastMemories = await queryMemoriesFromPinecone(userId, userMessage);
+    // Low latency Pinecone memory lookup with 1.2s timeout fallback
+    let pastMemories: string[] = [];
+    try {
+      const memoryPromise = queryMemoriesFromPinecone(userId, userMessage);
+      const timeoutPromise = new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 1200));
+      pastMemories = await Promise.race([memoryPromise, timeoutPromise]);
+    } catch (e) {
+      pastMemories = [];
+    }
+
     const memoryContext = pastMemories.length > 0 
       ? `[Gelerntes Langzeitgedächtnis aus vergangenen Gesprächen: ${pastMemories.join(' | ')}]`
       : '';
 
-    // Prompt Gemini with memory context
-    const fullPrompt = `${memoryContext}\nUser spricht am Telefon: "${userMessage}". Antworte wie in einem natürlichen Telefongespräch auf Deutsch. Behalte deine Antworten prägnant, natürlich und sprichklar.`;
+    // Prompt Gemini with memory context for low-latency call response
+    const fullPrompt = `${memoryContext}\nUser spricht am Telefon: "${userMessage}". Antworte wie in einem natürlichen Telefongespräch auf Deutsch. Behalte deine Antworten sehr prägnant (1-2 kurze Sätze), natürlich und sprichklar.`;
     const responseText = await chatWithBot(fullPrompt);
 
-    // If history length exceeds 30 messages, trigger Pinecone memory storage
-    let memorySaved = false;
+    // Asynchronously store long-term memory in Pinecone when history >= 30
     if (messageHistory.length >= 30) {
       const summaryText = messageHistory.slice(-30).map((m: any) => `${m.sender}: ${m.text}`).join('\n');
-      memorySaved = await storeMemoryInPinecone(userId, summaryText, messageHistory.length);
+      storeMemoryInPinecone(userId, summaryText, messageHistory.length).catch(console.error);
     }
 
     return NextResponse.json({
       response: responseText,
-      memorySaved,
       memoriesUsed: pastMemories.length
     });
   } catch (err: any) {

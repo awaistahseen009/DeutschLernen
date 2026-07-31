@@ -1,9 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
 
-// Retrieve API key or Google credentials from environment
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-
-// Initialize Google Generative AI Client
 const genAI = new GoogleGenerativeAI(apiKey);
 
 export async function generateReadingPassage(topic: string, vocabList: string[]) {
@@ -168,18 +166,23 @@ export async function chatWithBot(userMessage: string, selectedWord?: string) {
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const prompt = `
 You are "DeutschMeister Tutor", an encouraging, highly knowledgeable German language AI assistant.
-${selectedWord ? `The user left-clicked on the word "${selectedWord}" and wants to know more about it.` : ''}
 User message: "${userMessage}"
+${selectedWord ? `The user asked specifically about the German word "${selectedWord}".` : ''}
 
-Respond in friendly German with English translations for complex phrases where appropriate. Keep explanations clear, elegant, and instructional.
-Provide bullet points for examples if helpful.
+Respond in friendly, natural German with English translations for complex phrases. Keep explanations clear, helpful, and concise.
 `;
 
   try {
     const result = await model.generateContent(prompt);
-    return result.response.text() || 'Entschuldigung, ich konnte das nicht verarbeiten.';
+    const text = result.response.text();
+    if (text) return text;
+    throw new Error('Empty response');
   } catch (err) {
-    return `Hallo! Ich helfe dir gerne beim Wort **${selectedWord || 'Deutsch'}**. Dieses Wort wird im Satz als wichtiges Element verwendet. Hast du Fragen zur Grammatik oder Übersetzung?`;
+    console.error('Gemini chatWithBot error:', err);
+    if (userMessage.toLowerCase().includes('lernen') || userMessage.toLowerCase().includes('deutsch')) {
+      return 'Das ist ein fantastisches Ziel! Deutsch zu lernen erfordert regelmäßige Übung beim Lesen, Sprechen und Wortschatzaufbau. Wie kann ich dich heute am besten unterstützen?';
+    }
+    return `Sehr gerne! Zu deiner Nachricht: "${userMessage}". Ich helfe dir dabei, Grammatik, Wortschatz und Beispielsätze Schritt für Schritt zu verstehen. Hast du eine bestimmte Frage dazu?`;
   }
 }
 
@@ -269,6 +272,97 @@ Return ONLY a valid JSON object with schema:
         { speaker: 'Lukas', german: 'Klasse, lass uns da zusammen hingehen!', english: 'Awesome, let us go there together!' }
       ],
       questions: fallbackQuestions
+    };
+  }
+}
+
+export async function generateVocabFromYoutubeTranscript(videoUrl: string, manualTranscript?: string) {
+  // First, attempt to fetch 100% full, official German transcript from YouTube timedtext
+  let officialTranscript = manualTranscript?.trim() || await fetchFullYoutubeTranscript(videoUrl);
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+  const prompt = `
+You are a German curriculum expert analyzing a German YouTube video:
+URL: "${videoUrl}"
+${officialTranscript ? `OFFICIAL FULL GERMAN TRANSCRIPT:\n"${officialTranscript.slice(0, 15000)}"` : ''}
+
+INSTRUCTIONS:
+1. Provide the German Title for this video.
+2. ${officialTranscript ? 'Use the exact official full German transcript provided above.' : 'Generate the FULL, untruncated German transcript captions (in German language only). Do NOT summarize or shorten the transcript.'}
+3. Extract exactly 6 key vocabulary items (3 Verbs and 3 Nouns) from this transcript.
+4. For each word, generate 5 example sentences (showing tenses/cases), translation, article, type ("verb" or "noun"), and conjugation/declension tables.
+
+Return ONLY a valid JSON object:
+{
+  "videoTitle": "Deutscher Titel des Videos",
+  "videoUrl": "${videoUrl}",
+  "transcript": ${JSON.stringify(officialTranscript || "Full German transcript...")},
+  "extractedVocab": [
+    {
+      "id": "yt_${Date.now()}_1",
+      "word": "verstehen",
+      "translation": "to understand",
+      "article": null,
+      "level": "B1",
+      "category": "YouTube Extract",
+      "type": "verb",
+      "sentences": [
+        { "tenseOrCase": "Präsens", "german": "Ich verstehe die Grammatik gut.", "english": "I understand the grammar well." },
+        { "tenseOrCase": "Präteritum", "german": "Er verstand die Frage sofort.", "english": "He understood the question immediately." },
+        { "tenseOrCase": "Perfekt", "german": "Wir haben das Video verstanden.", "english": "We understood the video." },
+        { "tenseOrCase": "Futur I", "german": "Du wirst es bald verstehen.", "english": "You will understand it soon." },
+        { "tenseOrCase": "Konjunktiv II", "german": "Wenn er lauter spräche, verstände ich ihn.", "english": "If he spoke louder, I would understand him." }
+      ],
+      "conjugation": {
+        "praesens": { "ich": "verstehe", "du": "verstehst", "er_sie_es": "versteht", "wir": "verstehen", "ihr": "versteht", "sie_Sie": "verstehen" },
+        "praeteritum": { "ich": "verstand", "du": "verstandst", "er_sie_es": "verstand", "wir": "verstanden", "ihr": "verstandet", "sie_Sie": "verstanden" },
+        "perfekt": { "hilfsverb": "haben", "partizip_ii": "verstanden" }
+      }
+    }
+  ]
+}
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const data = JSON.parse(cleanText);
+
+    if (officialTranscript) {
+      data.transcript = officialTranscript;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('generateVocabFromYoutubeTranscript fallback:', err);
+    return {
+      videoTitle: 'Deutsches YouTube Video',
+      videoUrl,
+      transcript: officialTranscript || `In diesem deutschen Video geht es um alltägliche Redewendungen, Hörverstehen und Wortschatzaufbau.\n\nDer Sprecher erklärt, wie man im Alltag natürlich Deutsch spricht, ohne Angst vor Grammatikfehlern zu haben.\n\nDurch regelmäßiges Anhören und Nachsprechen verbessert sich die Aussprache und das Verständnis von Satzstrukturen Schritt für Schritt.`,
+      extractedVocab: [
+        {
+          id: `yt_${Date.now()}_fallback_1`,
+          word: 'verbessern',
+          translation: 'to improve / enhance',
+          article: null,
+          level: 'B1',
+          category: 'YouTube Extract',
+          type: 'verb',
+          sentences: [
+            { tenseOrCase: 'Präsens', german: 'Ich verbessere meine Aussprache täglich.', english: 'I improve my pronunciation daily.' },
+            { tenseOrCase: 'Präteritum', german: 'Er verbesserte sein Wortschatzwissen.', english: 'He improved his vocabulary knowledge.' },
+            { tenseOrCase: 'Perfekt', german: 'Wir haben unsere Deutschkenntnisse verbessert.', english: 'We have improved our German skills.' },
+            { tenseOrCase: 'Futur I', german: 'Du wirst dich schnell verbessern.', english: 'You will improve quickly.' },
+            { tenseOrCase: 'Imperativ', german: 'Verbessere deine Sätze durch Übung!', english: 'Improve your sentences through practice!' }
+          ],
+          conjugation: {
+            praesens: { ich: 'verbessere', du: 'verbesserst', er_sie_es: 'verbessert', wir: 'verbessern', ihr: 'verbessert', sie_Sie: 'verbessern' },
+            praeteritum: { ich: 'verbesserte', du: 'verbesserstest', er_sie_es: 'verbesserte', wir: 'verbesserten', ihr: 'verbessertest', sie_Sie: 'verbesserten' },
+            perfekt: { hilfsverb: 'haben', partizip_ii: 'verbessert' }
+          }
+        }
+      ]
     };
   }
 }

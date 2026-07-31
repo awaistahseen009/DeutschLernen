@@ -12,12 +12,13 @@ import {
   User, 
   Menu, 
   X,
-  Layers
+  Layers,
+  Youtube
 } from 'lucide-react';
 
 interface LeftSidebarProps {
-  activeTab: 'vocab' | 'reading' | 'exercises' | 'call' | 'favorites';
-  setActiveTab: (tab: 'vocab' | 'reading' | 'exercises' | 'call' | 'favorites') => void;
+  activeTab: 'vocab' | 'reading' | 'exercises' | 'call' | 'favorites' | 'youtube';
+  setActiveTab: (tab: 'vocab' | 'reading' | 'exercises' | 'call' | 'favorites' | 'youtube') => void;
   selectedLevel: string;
   setSelectedLevel: (level: string) => void;
   germanVoices: SpeechSynthesisVoice[];
@@ -48,6 +49,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
   const navItems = [
     { id: 'vocab', label: 'Wortschatz & Verben', sub: 'Flashcards & Conjugations', icon: BookOpen },
+    { id: 'youtube', label: 'YouTube Extractor', sub: 'Transcripts & Auto-Flashcards', icon: Youtube },
     { id: 'reading', label: 'KI Lesetexte', sub: 'Interactive Passages & Hover', icon: Newspaper },
     { id: 'exercises', label: 'Sprechen, Schreiben & Hören', sub: 'AI Conversations & 15Q Quiz', icon: Mic },
     { id: 'call', label: 'Echtzeit KI Anruf', sub: 'Live Voice Call & Pinecone Memory', icon: Phone },
@@ -105,7 +107,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 <button
                   key={item.id}
                   onClick={() => {
-                    setActiveTab(item.id);
+                    setActiveTab(item.id as any);
                     setIsOpenMobile(false);
                   }}
                   className={`

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, UserCheck, Sparkles, BookOpen } from 'lucide-react';
+import { Mail, Lock, UserCheck, Sparkles, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -104,7 +104,10 @@ export default function LoginPage() {
             className="w-full py-3.5 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-lg disabled:opacity-50 transition-transform active:scale-95 border border-gold-500/30 flex items-center justify-center gap-2 mt-2"
           >
             {isLoading ? (
-              'Anmelden...'
+              <>
+                <Loader2 size={16} className="animate-spin text-gold-400" />
+                <span>Anmelden...</span>
+              </>
             ) : (
               <>
                 <UserCheck size={16} /> Anmelden & Portal Öffnen

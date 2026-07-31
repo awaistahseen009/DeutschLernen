@@ -18,6 +18,7 @@ model User {
   readingResults     ReadingResult[]
   writingSubmissions WritingSubmission[]
   listeningResults   ListeningResult[]
+  youtubeTranscripts YoutubeTranscript[]
 
   @@map("users")
 }
@@ -98,4 +99,17 @@ model ListeningResult {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("listening_results")
+}
+
+model YoutubeTranscript {
+  id           Int      @id @default(autoincrement())
+  userId       String   @map("user_id")
+  videoUrl     String   @map("video_url")
+  videoTitle   String   @map("video_title")
+  transcript   String   @db.Text
+  vocabJson    Json     @map("vocab_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("youtube_transcripts")
 }

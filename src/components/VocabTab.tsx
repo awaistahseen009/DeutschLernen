@@ -13,8 +13,10 @@ import {
   ChevronRight, 
   ChevronLeft, 
   Sparkles,
-  Award
+  Award,
+  Gauge
 } from 'lucide-react';
+import { speakTextWithCache } from '@/lib/tts';
 
 interface VocabTabProps {
   vocabList: VocabItem[];
@@ -40,6 +42,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
   const [isQuizModalOpen, setIsQuizModalOpen] = useState(false);
   const [quizScore, setQuizScore] = useState<number | null>(null);
   const [userQuizAnswers, setUserQuizAnswers] = useState<Record<number, number>>({});
+  const [speechRate, setSpeechRate] = useState<number>(1.0);
 
   const categories = ['ALL', ...Array.from(new Set(vocabList.map(v => v.category)))];
 
@@ -49,18 +52,8 @@ export const VocabTab: React.FC<VocabTabProps> = ({
 
   const currentItem = filteredVocab[currentIndex] || filteredVocab[0];
 
-  const speakText = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'de-DE';
-
-    if (selectedVoiceURI) {
-      const voices = window.speechSynthesis.getVoices();
-      const foundVoice = voices.find(v => v.voiceURI === selectedVoiceURI);
-      if (foundVoice) utterance.voice = foundVoice;
-    }
-    window.speechSynthesis.speak(utterance);
+  const playSpeech = (text: string) => {
+    speakTextWithCache(text, speechRate, selectedVoiceURI);
   };
 
   useEffect(() => {
@@ -102,6 +95,8 @@ export const VocabTab: React.FC<VocabTabProps> = ({
     setQuizScore(score);
   };
 
+  const speeds = [0.5, 0.75, 1.0, 1.25, 1.5];
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12">
       {/* Top Banner & Category Chips */}
@@ -112,12 +107,23 @@ export const VocabTab: React.FC<VocabTabProps> = ({
           <p className="text-xs text-cream-800 mt-1">Lerne Wörter mit 5 Beispielsätzen (Kasus & Tenses) & Grammatik-Seitenleiste.</p>
         </div>
 
-        <div className="bg-cream-900 text-cream-50 px-4 py-3 rounded-2xl border border-gold-500/30 flex items-center gap-3 shadow-md">
-          <Award size={22} className="text-gold-400" />
-          <div>
-            <div className="text-[10px] text-gold-400 font-bold uppercase tracking-wider">Fortschritt</div>
-            <div className="text-xs font-semibold">{learnedCountForDisplay(learnedIds.length)}</div>
-          </div>
+        {/* Speed Rate Control Toggle */}
+        <div className="bg-cream-100 p-2 rounded-2xl border border-cream-300 flex items-center gap-1.5 shadow-sm">
+          <Gauge size={16} className="text-gold-700 ml-1" />
+          <span className="text-[11px] font-bold text-charcoal-900 uppercase mr-1">Tempo:</span>
+          {speeds.map(sp => (
+            <button
+              key={sp}
+              onClick={() => setSpeechRate(sp)}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
+                speechRate === sp 
+                  ? 'bg-cream-900 text-gold-400 shadow-sm' 
+                  : 'text-charcoal-800 hover:bg-cream-200'
+              }`}
+            >
+              {sp}x
+            </button>
+          ))}
         </div>
       </div>
 
@@ -191,11 +197,12 @@ export const VocabTab: React.FC<VocabTabProps> = ({
               {currentItem.word}
             </h1>
             <button
-              onClick={() => speakText(currentItem.word)}
-              className="p-3 bg-cream-900 text-gold-400 hover:bg-charcoal-900 rounded-2xl shadow-md transition-transform hover:scale-105"
-              title="Aussprache anhören"
+              onClick={() => playSpeech(currentItem.word)}
+              className="p-3 bg-cream-900 text-gold-400 hover:bg-charcoal-900 rounded-2xl shadow-md transition-transform hover:scale-105 flex items-center gap-1"
+              title="Aussprache anhören (Cached)"
             >
               <Volume2 size={22} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">{speechRate}x</span>
             </button>
           </div>
 
@@ -212,10 +219,13 @@ export const VocabTab: React.FC<VocabTabProps> = ({
           </button>
         </div>
 
-        {/* 5 Sentence Options with Voice Buttons */}
+        {/* 5 Sentence Options with Voice Buttons & Cached Speed Controls */}
         <div className="space-y-3 pt-6 border-t border-cream-200">
-          <div className="text-xs font-bold text-charcoal-900 uppercase tracking-wider mb-2 flex items-center gap-2">
-            <Sparkles size={14} className="text-gold-600" /> 5 Beispielsätze (Tenses / Kasus Formate)
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-bold text-charcoal-900 uppercase tracking-wider flex items-center gap-2">
+              <Sparkles size={14} className="text-gold-600" /> 5 Beispielsätze (Tenses / Kasus Formate)
+            </div>
+            <span className="text-[10px] font-semibold text-cream-800 italic">Tempo: {speechRate}x (In-Memory Audio Caching)</span>
           </div>
 
           {currentItem.sentences.map((sent: SentenceExample, idx: number) => (
@@ -233,13 +243,16 @@ export const VocabTab: React.FC<VocabTabProps> = ({
                 <p className="text-xs text-cream-800 italic pl-1">{sent.english}</p>
               </div>
 
-              <button
-                onClick={() => speakText(sent.german)}
-                className="p-2.5 bg-cream-50 hover:bg-cream-900 hover:text-gold-400 text-charcoal-900 rounded-xl border border-cream-300 transition-colors self-end sm:self-center"
-                title="Satz vorlesen"
-              >
-                <Volume2 size={16} />
-              </button>
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                <button
+                  onClick={() => playSpeech(sent.german)}
+                  className="p-2.5 bg-cream-50 hover:bg-cream-900 hover:text-gold-400 text-charcoal-900 rounded-xl border border-cream-300 transition-colors flex items-center gap-1.5 font-bold text-xs"
+                  title="Satz mit Cache vorlesen"
+                >
+                  <Volume2 size={16} />
+                  <span className="text-[10px]">{speechRate}x</span>
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -322,7 +335,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
 
                 <button
                   onClick={submitQuiz}
-                  className="w-full py-3.5 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md transition-colors"
+                  className="w-full py-3.5 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md transition-colors font-bold"
                 >
                   Quiz Einreichen & Ergebis Speichern
                 </button>

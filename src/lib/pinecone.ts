@@ -5,21 +5,23 @@ const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
 const pineconeApiKey = process.env.PINECONE_API_KEY || '';
-const indexName = process.env.PINECONE_INDEX_NAME || 'deutschmeister-memories';
+const indexName = process.env.PINECONE_INDEX_NAME || 'germanlang';
 
 export const pinecone = pineconeApiKey ? new Pinecone({ apiKey: pineconeApiKey }) : null;
 
+// Generate 768-dim text embedding using Google Gemini embedding-001 model
 export async function getEmbedding(text: string): Promise<number[]> {
   try {
-    const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+    const model = genAI.getGenerativeModel({ model: 'embedding-001' });
     const result = await model.embedContent(text);
     return result.embedding.values;
   } catch (err) {
-    console.warn('Gemini embedding failed, returning fallback zeros vector:', err);
+    console.warn('Gemini embedding fallback zeros vector:', err);
     return new Array(768).fill(0);
   }
 }
 
+// Upsert memory vector to Pinecone
 export async function storeMemoryInPinecone(userId: string, conversationSummary: string, messageCount: number) {
   if (!pinecone || !pineconeApiKey) {
     console.warn('Pinecone API Key not configured. Skipping Pinecone vector memory save.');
@@ -51,6 +53,7 @@ export async function storeMemoryInPinecone(userId: string, conversationSummary:
   }
 }
 
+// Query Pinecone for relevant long-term memories with low latency
 export async function queryMemoriesFromPinecone(userId: string, queryText: string): Promise<string[]> {
   if (!pinecone || !pineconeApiKey) return [];
 

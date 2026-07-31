@@ -5,23 +5,26 @@ import { VOCAB_DATABASE, VocabItem } from '@/data/vocabData';
 import { LeftSidebar } from '@/components/LeftSidebar';
 import { RightSidebar } from '@/components/RightSidebar';
 import { VocabTab } from '@/components/VocabTab';
+import { YoutubeTab } from '@/components/YoutubeTab';
 import { ReadingTab } from '@/components/ReadingTab';
 import { ExercisesTab } from '@/components/ExercisesTab';
 import { CallTab } from '@/components/CallTab';
 import { FavoritesTab } from '@/components/FavoritesTab';
 import { LoginModal } from '@/components/LoginModal';
-import { Lock, User } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'vocab' | 'reading' | 'exercises' | 'call' | 'favorites'>('vocab');
+  const [activeTab, setActiveTab] = useState<'vocab' | 'youtube' | 'reading' | 'exercises' | 'call' | 'favorites'>('vocab');
   const [selectedLevel, setSelectedLevel] = useState<string>('ALL');
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
   const [germanVoices, setGermanVoices] = useState<SpeechSynthesisVoice[]>([]);
 
-  // DB Synced Progress & Favorites
+  // DB Synced Progress & Favorites & Custom Vocab
   const [learnedIds, setLearnedIds] = useState<string[]>([]);
   const [favorites, setFavorites] = useState<Record<string, string>>({});
+  const [customVocab, setCustomVocab] = useState<VocabItem[]>([]);
   const [currentUser, setCurrentUser] = useState<{ email: string } | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Sidebars open state
   const [isMobileLeftOpen, setIsMobileLeftOpen] = useState(false);
@@ -32,12 +35,25 @@ export default function Home() {
   const [chatbotPromptWord, setChatbotPromptWord] = useState<string | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
-  // Auto open login on first load if not authenticated
+  // Verify auth session on load
   useEffect(() => {
-    if (!currentUser) {
-      setIsLoginOpen(true);
-    }
-  }, [currentUser]);
+    const checkAuth = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.user) {
+            setCurrentUser(data.user);
+          }
+        }
+      } catch (err) {
+        console.warn('Auth check warning:', err);
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+    checkAuth();
+  }, []);
 
   // Load German TTS voices
   useEffect(() => {
@@ -55,7 +71,7 @@ export default function Home() {
     }
   }, []);
 
-  // Fetch progress & favorites directly from Neon PostgreSQL API
+  // Fetch progress & favorites directly from Neon PostgreSQL API (Continuous progress tracking across sessions)
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -67,6 +83,8 @@ export default function Home() {
         }
       } catch (err) {
         console.warn('DB fetch warning:', err);
+      } finally {
+        setIsInitialLoading(false);
       }
     };
     fetchUserData();
@@ -107,9 +125,22 @@ export default function Home() {
     }
   };
 
+  const allVocabDatabase = [...VOCAB_DATABASE, ...customVocab];
+
   const filteredVocab = selectedLevel === 'ALL'
-    ? VOCAB_DATABASE
-    : VOCAB_DATABASE.filter(v => v.level === selectedLevel);
+    ? allVocabDatabase
+    : allVocabDatabase.filter(v => v.level === selectedLevel);
+
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen bg-cream-50 flex items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-3 text-charcoal-900">
+          <Loader2 size={36} className="animate-spin text-gold-600" />
+          <span className="font-serif text-lg font-bold">DeutschMeister wird geladen...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cream-50 flex">
@@ -134,21 +165,6 @@ export default function Home() {
         flex-1 transition-all duration-300 p-4 sm:p-8 pt-20 lg:pt-8
         lg:ml-80 ${isRightOpen ? 'lg:mr-96' : 'lg:mr-0'}
       `}>
-        {!currentUser && (
-          <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-300 flex items-center justify-between text-amber-900 text-xs">
-            <div className="flex items-center gap-2">
-              <Lock size={16} className="text-amber-700" />
-              <span><strong>Gastmodus:</strong> Melde dich an, um deinen Lernfortschritt in der Neon PostgreSQL Datenbank zu speichern.</span>
-            </div>
-            <button
-              onClick={() => setIsLoginOpen(true)}
-              className="px-3 py-1.5 bg-cream-900 text-gold-400 font-bold rounded-xl text-xs hover:bg-charcoal-900 transition-colors"
-            >
-              Jetzt Anmelden
-            </button>
-          </div>
-        )}
-
         {activeTab === 'vocab' && (
           <VocabTab
             vocabList={filteredVocab}
@@ -161,6 +177,19 @@ export default function Home() {
               setIsRightOpen(true);
             }}
             selectedVoiceURI={selectedVoiceURI}
+          />
+        )}
+
+        {activeTab === 'youtube' && (
+          <YoutubeTab
+            selectedVoiceURI={selectedVoiceURI}
+            onSelectVocab={(item) => {
+              setSelectedVocab(item);
+              setIsRightOpen(true);
+            }}
+            onAppendCustomVocab={(items) => {
+              setCustomVocab(prev => [...prev, ...items]);
+            }}
           />
         )}
 
@@ -183,7 +212,7 @@ export default function Home() {
 
         {activeTab === 'favorites' && (
           <FavoritesTab
-            vocabList={VOCAB_DATABASE}
+            vocabList={allVocabDatabase}
             favorites={favorites}
             onToggleFavorite={handleToggleFavorite}
             onSelectVocab={(item) => {
@@ -203,7 +232,7 @@ export default function Home() {
         setIsOpen={setIsRightOpen}
       />
 
-      {/* Admin Login Modal */}
+      {/* Admin Login Modal (Triggered manually via sidebar button) */}
       <LoginModal
         isOpen={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}

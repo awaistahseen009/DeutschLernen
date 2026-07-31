@@ -3,6 +3,7 @@
 import React from 'react';
 import { VocabItem } from '@/data/vocabData';
 import { Heart, Volume2, BookOpen } from 'lucide-react';
+import { speakTextWithCache } from '@/lib/tts';
 
 interface FavoritesTabProps {
   vocabList: VocabItem[];
@@ -22,16 +23,7 @@ export const FavoritesTab: React.FC<FavoritesTabProps> = ({
   const favoritedItems = vocabList.filter(v => v.id in favorites);
 
   const speakText = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'de-DE';
-    if (selectedVoiceURI) {
-      const voices = window.speechSynthesis.getVoices();
-      const foundVoice = voices.find(v => v.voiceURI === selectedVoiceURI);
-      if (foundVoice) utterance.voice = foundVoice;
-    }
-    window.speechSynthesis.speak(utterance);
+    speakTextWithCache(text, 1.0, selectedVoiceURI);
   };
 
   return (
@@ -39,14 +31,14 @@ export const FavoritesTab: React.FC<FavoritesTabProps> = ({
       <div className="bg-cream-50 p-6 rounded-3xl border border-cream-300/80 shadow-soft">
         <span className="text-xs font-semibold text-gold-700 uppercase tracking-widest">Gespeicherte Inhalte</span>
         <h2 className="font-serif text-3xl font-bold text-charcoal-900 mt-1">Favoriten & Notizen</h2>
-        <p className="text-xs text-cream-800 mt-1">Deine geseicherten Wörter, Sätze und Notizen an einem Ort.</p>
+        <p className="text-xs text-cream-800 mt-1">Deine gespeicherten Wörter, Sätze und Notizen an einem Ort.</p>
       </div>
 
       {favoritedItems.length === 0 ? (
         <div className="bg-cream-50 rounded-3xl border border-cream-300 p-12 text-center text-cream-800">
           <Heart size={40} className="text-cream-400 mx-auto mb-3" />
           <h3 className="font-serif font-bold text-xl text-charcoal-900">Noch keine Favoriten</h3>
-          <p className="text-xs mt-1">Klicke auf das Herz-Symbol auf einer belieben Lernkarte, um sie hier zu speichern.</p>
+          <p className="text-xs mt-1">Klicke auf das Herz-Symbol auf einer beliebigen Lernkarte, um sie hier zu speichern.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -68,6 +60,7 @@ export const FavoritesTab: React.FC<FavoritesTabProps> = ({
                   <button
                     onClick={() => speakText(item.word)}
                     className="p-2 bg-cream-100 hover:bg-cream-200 text-charcoal-900 rounded-xl"
+                    title="Aussprache (Cache)"
                   >
                     <Volume2 size={16} />
                   </button>
@@ -75,6 +68,7 @@ export const FavoritesTab: React.FC<FavoritesTabProps> = ({
                   <button
                     onClick={() => onToggleFavorite(item.id, false)}
                     className="p-2 bg-rose-50 text-rose-600 rounded-xl"
+                    title="Aus Favoriten entfernen"
                   >
                     <Heart size={16} fill="currentColor" />
                   </button>
@@ -85,9 +79,18 @@ export const FavoritesTab: React.FC<FavoritesTabProps> = ({
               <div className="space-y-2 pt-1">
                 <div className="text-[10px] font-bold text-cream-800 uppercase tracking-wider">Beispielsätze:</div>
                 {item.sentences.slice(0, 2).map((s, idx) => (
-                  <div key={idx} className="p-2.5 bg-cream-100 rounded-xl text-xs">
-                    <p className="font-semibold text-charcoal-900">{s.german}</p>
-                    <p className="text-[11px] text-cream-800 italic">{s.english}</p>
+                  <div key={idx} className="p-2.5 bg-cream-100 rounded-xl text-xs flex items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-charcoal-900">{s.german}</p>
+                      <p className="text-[11px] text-cream-800 italic">{s.english}</p>
+                    </div>
+                    <button
+                      onClick={() => speakText(s.german)}
+                      className="p-1.5 hover:bg-cream-200 text-charcoal-800 rounded-lg shrink-0"
+                      title="Satz anhören"
+                    >
+                      <Volume2 size={14} />
+                    </button>
                   </div>
                 ))}
               </div>
