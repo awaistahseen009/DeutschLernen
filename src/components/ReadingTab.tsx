@@ -67,7 +67,7 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
 
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.max(120, Math.min(window.innerWidth - 120, rect.left + (rect.width / 2)));
-    const y = Math.max(20, rect.top - 55);
+    const y = Math.max(10, rect.top - 6);
 
     setHoverTooltip({
       word: cleanWord,
@@ -153,7 +153,7 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
       {hoverTooltip && (
         <div 
           style={{ top: `${hoverTooltip.y}px`, left: `${hoverTooltip.x}px` }}
-          className="fixed z-50 bg-cream-900 text-cream-50 p-3 rounded-2xl shadow-2xl border border-gold-500/50 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 transition-all"
+          className="fixed z-50 bg-cream-900 text-cream-50 p-2.5 rounded-2xl shadow-2xl border border-gold-500/50 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all"
         >
           <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1 gap-2">
             <strong className="text-gold-400 font-serif text-sm">{hoverTooltip.word}</strong>
