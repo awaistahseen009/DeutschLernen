@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-cream: #FAF7F2;
+    --bg-cream-card: #FFFFFF;
+    --text-charcoal: #18181B;
+    --text-muted: #6B655F;
+    --accent-gold: #D4AF37;
+    --accent-sepia: #8C6D3B;
+    --border-cream: #E8E2D9;
+  }
+
+  body {
+    background-color: var(--bg-cream);
+    color: var(--text-charcoal);
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, .font-serif {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F3ECE1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D2C2A5;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B89228;
+}
+
+/* Interactive Passage Hover & Underline */
+.hover-word {
+  display: inline-block;
+  cursor: pointer;
+  padding: 0 2px;
+  border-bottom: 2px dotted #D4AF37;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.hover-word:hover {
+  background-color: rgba(212, 175, 55, 0.2);
+  border-bottom: 2px solid #8C6D3B;
+  border-radius: 3px;
+  color: #8C6D3B;
+}
+
+/* Glassmorphic Cream Cards */
+.cream-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(210, 194, 165, 0.4);
+  box-shadow: 0 10px 30px -5px rgba(28, 25, 23, 0.05);
+}

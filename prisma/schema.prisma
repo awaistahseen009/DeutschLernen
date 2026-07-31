@@ -1,0 +1,101 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                 String              @id @default(uuid())
+  email              String              @unique
+  passwordHash       String              @map("password_hash")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  vocabProgress      VocabProgress[]
+  favorites          Favorite[]
+  readingPassages    ReadingPassage[]
+  readingResults     ReadingResult[]
+  writingSubmissions WritingSubmission[]
+  listeningResults   ListeningResult[]
+
+  @@map("users")
+}
+
+model VocabProgress {
+  id            Int      @id @default(autoincrement())
+  userId        String   @map("user_id")
+  vocabId       String   @map("vocab_id")
+  learned       Boolean  @default(false)
+  timesReviewed Int      @default(0) @map("times_reviewed")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vocabId])
+  @@map("vocab_progress")
+}
+
+model Favorite {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id")
+  vocabId   String   @map("vocab_id")
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vocabId])
+  @@map("favorites")
+}
+
+model ReadingPassage {
+  id            Int             @id @default(autoincrement())
+  userId        String          @map("user_id")
+  title         String
+  content       String          @db.Text
+  questionsJson Json            @map("questions_json")
+  topic         String?
+  createdAt     DateTime        @default(now()) @map("created_at")
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  results       ReadingResult[]
+
+  @@map("reading_passages")
+}
+
+model ReadingResult {
+  id              Int            @id @default(autoincrement())
+  userId          String         @map("user_id")
+  passageId       Int?           @map("passage_id")
+  userAnswersJson Json           @map("user_answers_json")
+  score           Int
+  feedbackJson    Json?          @map("feedback_json")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  passage         ReadingPassage? @relation(fields: [passageId], references: [id], onDelete: Cascade)
+
+  @@map("reading_results")
+}
+
+model WritingSubmission {
+  id             Int      @id @default(autoincrement())
+  userId         String   @map("user_id")
+  promptEnglish  String   @map("prompt_english") @db.Text
+  userGermanText String   @map("user_german_text") @db.Text
+  score          Int
+  feedbackJson   Json?    @map("feedback_json")
+  createdAt      DateTime @default(now()) @map("created_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("writing_submissions")
+}
+
+model ListeningResult {
+  id             Int      @id @default(autoincrement())
+  userId         String   @map("user_id")
+  dialogueTitle  String   @map("dialogue_title")
+  score          Int
+  totalQuestions Int      @map("total_questions")
+  createdAt      DateTime @default(now()) @map("created_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("listening_results")
+}
