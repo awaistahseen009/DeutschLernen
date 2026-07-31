@@ -10,6 +10,7 @@ import { ExercisesTab } from '@/components/ExercisesTab';
 import { CallTab } from '@/components/CallTab';
 import { FavoritesTab } from '@/components/FavoritesTab';
 import { LoginModal } from '@/components/LoginModal';
+import { Lock, User } from 'lucide-react';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'vocab' | 'reading' | 'exercises' | 'call' | 'favorites'>('vocab');
@@ -30,6 +31,13 @@ export default function Home() {
   const [selectedVocab, setSelectedVocab] = useState<VocabItem | null>(null);
   const [chatbotPromptWord, setChatbotPromptWord] = useState<string | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+
+  // Auto open login on first load if not authenticated
+  useEffect(() => {
+    if (!currentUser) {
+      setIsLoginOpen(true);
+    }
+  }, [currentUser]);
 
   // Load German TTS voices
   useEffect(() => {
@@ -126,6 +134,21 @@ export default function Home() {
         flex-1 transition-all duration-300 p-4 sm:p-8 pt-20 lg:pt-8
         lg:ml-80 ${isRightOpen ? 'lg:mr-96' : 'lg:mr-0'}
       `}>
+        {!currentUser && (
+          <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-300 flex items-center justify-between text-amber-900 text-xs">
+            <div className="flex items-center gap-2">
+              <Lock size={16} className="text-amber-700" />
+              <span><strong>Gastmodus:</strong> Melde dich an, um deinen Lernfortschritt in der Neon PostgreSQL Datenbank zu speichern.</span>
+            </div>
+            <button
+              onClick={() => setIsLoginOpen(true)}
+              className="px-3 py-1.5 bg-cream-900 text-gold-400 font-bold rounded-xl text-xs hover:bg-charcoal-900 transition-colors"
+            >
+              Jetzt Anmelden
+            </button>
+          </div>
+        )}
+
         {activeTab === 'vocab' && (
           <VocabTab
             vocabList={filteredVocab}
