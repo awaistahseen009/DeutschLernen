@@ -54,15 +54,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
         </button>
 
         <div className="text-center pb-3 border-b border-cream-200">
-          <div className="w-12 h-12 bg-cream-900 text-gold-400 rounded-2xl flex items-center justify-center mx-auto mb-2 shadow-md border border-gold-500/30">
-            <User size={24} />
+          <div className="w-12 h-12 bg-cream-900 text-gold-400 rounded-2xl flex items-center justify-center mx-auto mb-2 shadow-md border border-gold-500/30 font-serif font-bold text-xl">
+            D
           </div>
           <h2 className="font-serif text-2xl font-bold text-charcoal-900">Admin Login</h2>
           <p className="text-xs text-cream-800 mt-1">
-            Erstmaliges Passwort über CMD festlegen: <br />
-            <code className="bg-cream-200 px-2 py-0.5 rounded text-[11px] font-mono font-bold text-charcoal-900">
-              node scripts/setup-admin.js admin@domain.com deinPasswort
-            </code>
+            Melde dich an, um deinen Lernfortschritt mit der Neon DB zu synchronisieren.
           </p>
         </div>
 
