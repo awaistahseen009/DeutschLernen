@@ -61,17 +61,19 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
     fetchPassage(topic);
   }, []);
 
-  // Hover or Underline word lookup
+  // Hover word lookup with viewport positioning right above word
   const handleWordHover = async (e: React.MouseEvent<HTMLSpanElement>, cleanWord: string) => {
     if (!cleanWord || cleanWord.length < 2) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    
+    const x = Math.max(120, Math.min(window.innerWidth - 120, rect.left + (rect.width / 2)));
+    const y = Math.max(20, rect.top - 55);
+
     setHoverTooltip({
       word: cleanWord,
       translation: 'Lädt Übersetzung...',
-      x: rect.left + window.scrollX,
-      y: rect.top + window.scrollY - 80
+      x,
+      y
     });
 
     try {
@@ -88,8 +90,8 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
         translation: data.englishTranslation,
         definition: data.germanDefinition,
         grammarNote: data.grammarNote,
-        x: rect.left + window.scrollX,
-        y: rect.top + window.scrollY - 90
+        x,
+        y
       });
     } catch (err) {
       setHoverTooltip(null);
@@ -123,7 +125,6 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
     }
   };
 
-  // Render passage with wrap words for hover & left-click
   const renderInteractivePassage = (text: string) => {
     if (!text) return null;
     const words = text.split(/(\s+)/);
@@ -149,17 +150,17 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12 relative">
-      {/* Floating Hover Tooltip */}
+      {/* Floating Hover Tooltip right above word */}
       {hoverTooltip && (
         <div 
           style={{ top: `${hoverTooltip.y}px`, left: `${hoverTooltip.x}px` }}
-          className="fixed z-50 bg-cream-900 text-cream-50 p-3.5 rounded-2xl shadow-2xl border border-gold-500/40 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 transition-opacity"
+          className="fixed z-50 bg-cream-900 text-cream-50 p-3 rounded-2xl shadow-2xl border border-gold-500/50 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 transition-all"
         >
-          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1">
+          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1 gap-2">
             <strong className="text-gold-400 font-serif text-sm">{hoverTooltip.word}</strong>
             {hoverTooltip.partOfSpeech && <span className="text-[10px] text-cream-300 uppercase">{hoverTooltip.partOfSpeech}</span>}
           </div>
-          <div className="text-cream-50 font-semibold mb-1">{hoverTooltip.translation}</div>
+          <div className="text-cream-50 font-bold text-sm mb-0.5">{hoverTooltip.translation}</div>
           {hoverTooltip.grammarNote && <div className="text-[11px] text-cream-300 italic">{hoverTooltip.grammarNote}</div>}
           <div className="text-[10px] text-gold-400/80 mt-1">Links-Klick zum Chatten mit KI-Tutor</div>
         </div>
@@ -176,7 +177,7 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
         <button
           onClick={() => fetchPassage(topic)}
           disabled={isLoading}
-          className="px-5 py-3 bg-cream-900 hover:bg-charcoal-900 text-gold-400 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md transition-all border border-gold-500/30"
+          className="px-5 py-3 bg-cream-900 hover:bg-charcoal-900 text-gold-400 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md transition-all border border-gold-500/30 font-bold"
         >
           {isLoading ? <Loader2 size={16} className="animate-spin text-gold-400" /> : <RefreshCw size={16} />}
           <span>Neuen Text Generieren</span>
@@ -292,7 +293,7 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
             <button
               onClick={handleSubmitAnswers}
               disabled={isGrading || Object.keys(userAnswers).length === 0}
-              className="w-full py-4 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md disabled:opacity-50 transition-colors flex items-center justify-center gap-2 border border-gold-500/30"
+              className="w-full py-4 bg-cream-900 hover:bg-charcoal-900 text-gold-400 font-bold text-xs rounded-2xl shadow-md disabled:opacity-50 transition-colors flex items-center justify-center gap-2 border border-gold-500/30 font-bold"
             >
               {isGrading ? <Loader2 size={16} className="animate-spin text-gold-400" /> : <CheckCircle2 size={16} />}
               <span>Antworten von KI Bewerten & In Datenbank Speichern</span>

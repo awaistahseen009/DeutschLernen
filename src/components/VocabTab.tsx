@@ -14,8 +14,7 @@ import {
   ChevronLeft, 
   Sparkles,
   Award,
-  Gauge,
-  Highlighter
+  Gauge
 } from 'lucide-react';
 import { speakTextWithCache } from '@/lib/tts';
 
@@ -39,7 +38,6 @@ interface HoverTooltip {
   y: number;
 }
 
-// Client-side dictionary cache for 0ms hover latency
 const clientDictCache = new Map<string, any>();
 
 export const VocabTab: React.FC<VocabTabProps> = ({
@@ -93,12 +91,16 @@ export const VocabTab: React.FC<VocabTabProps> = ({
     }
   };
 
-  // Hover or Text Selection Lookup with 0ms Client Cache
+  // Hover Lookup with accurate fixed viewport positioning (Right above the word!)
   const handleWordHover = async (e: React.MouseEvent<HTMLSpanElement>, cleanWord: string, context?: string) => {
     if (!cleanWord || cleanWord.length < 2) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const cacheKey = cleanWord.toLowerCase();
+
+    // Fixed Viewport Position right above the hovered word
+    const x = Math.max(120, Math.min(window.innerWidth - 120, rect.left + (rect.width / 2)));
+    const y = Math.max(20, rect.top - 55);
 
     if (clientDictCache.has(cacheKey)) {
       const cached = clientDictCache.get(cacheKey);
@@ -108,8 +110,8 @@ export const VocabTab: React.FC<VocabTabProps> = ({
         translation: cached.englishTranslation,
         definition: cached.germanDefinition,
         grammarNote: cached.grammarNote,
-        x: rect.left + window.scrollX,
-        y: rect.top + window.scrollY - 85
+        x,
+        y
       });
       return;
     }
@@ -117,8 +119,8 @@ export const VocabTab: React.FC<VocabTabProps> = ({
     setHoverTooltip({
       word: cleanWord,
       translation: 'Lädt Übersetzung...',
-      x: rect.left + window.scrollX,
-      y: rect.top + window.scrollY - 85
+      x,
+      y
     });
 
     try {
@@ -136,8 +138,8 @@ export const VocabTab: React.FC<VocabTabProps> = ({
         translation: data.englishTranslation,
         definition: data.germanDefinition,
         grammarNote: data.grammarNote,
-        x: rect.left + window.scrollX,
-        y: rect.top + window.scrollY - 85
+        x,
+        y
       });
     } catch (err) {
       setHoverTooltip(null);
@@ -187,19 +189,18 @@ export const VocabTab: React.FC<VocabTabProps> = ({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12 relative">
-      {/* Floating Hover Tooltip showing English Translation + German Context */}
+      {/* Floating Hover Tooltip directly above the word */}
       {hoverTooltip && (
         <div 
           style={{ top: `${hoverTooltip.y}px`, left: `${hoverTooltip.x}px` }}
-          className="fixed z-50 bg-cream-900 text-cream-50 p-3.5 rounded-2xl shadow-2xl border border-gold-500/40 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 transition-opacity"
+          className="fixed z-50 bg-cream-900 text-cream-50 p-3 rounded-2xl shadow-2xl border border-gold-500/50 text-xs max-w-xs pointer-events-none transform -translate-x-1/2 transition-all"
         >
-          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1">
+          <div className="flex items-center justify-between border-b border-gold-500/30 pb-1 mb-1 gap-2">
             <strong className="text-gold-400 font-serif text-sm">{hoverTooltip.word}</strong>
             {hoverTooltip.partOfSpeech && <span className="text-[10px] text-cream-300 uppercase">{hoverTooltip.partOfSpeech}</span>}
           </div>
-          <div className="text-cream-50 font-bold text-sm mb-1">{hoverTooltip.translation}</div>
+          <div className="text-cream-50 font-bold text-sm mb-0.5">{hoverTooltip.translation}</div>
           {hoverTooltip.definition && <div className="text-[11px] text-cream-200 italic">{hoverTooltip.definition}</div>}
-          {hoverTooltip.grammarNote && <div className="text-[10px] text-gold-400/80 mt-1">{hoverTooltip.grammarNote}</div>}
         </div>
       )}
 
@@ -453,8 +454,3 @@ export const VocabTab: React.FC<VocabTabProps> = ({
     </div>
   );
 };
-
-function learnedCountForDisplay(count: number) {
-  const nextTarget = Math.ceil((count + 1) / 20) * 20;
-  return `${count} / ${nextTarget} (Quiz bei ${nextTarget})`;
-}
