@@ -13,7 +13,8 @@ import {
   Menu, 
   X,
   Layers,
-  Youtube
+  Youtube,
+  LogOut
 } from 'lucide-react';
 
 interface LeftSidebarProps {
@@ -56,6 +57,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     { id: 'favorites', label: 'Favoriten & Notizen', sub: 'Saved Cards & Sentences', icon: Heart },
   ] as const;
 
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    } catch (err) {
+      window.location.href = '/login';
+    }
+  };
+
   return (
     <>
       {/* Mobile Toggle Button */}
@@ -78,7 +88,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       {/* Sidebar Container */}
       <aside className={`
         fixed top-0 left-0 bottom-0 z-40 w-80 bg-cream-100 border-r border-cream-300/80 p-6 flex flex-col justify-between
-        transform transition-transform duration-300 ease-in-out
+        transform transition-transform duration-300 ease-in-out overflow-y-auto
         ${isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Brand Header */}
@@ -162,25 +172,31 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           {/* Voice Selector Dropdown */}
           <div className="mt-5 pt-5 border-t border-cream-300/60">
             <label className="flex items-center gap-2 text-xs font-semibold text-cream-800 uppercase tracking-wider mb-2">
-              <Volume2 size={14} className="text-gold-600" /> Deutsche Sprachausgabe
+              <Volume2 size={14} className="text-gold-600" /> Deutsche Sprachausgabe Stimmen
             </label>
-            <select
-              value={selectedVoiceURI}
-              onChange={(e) => setSelectedVoiceURI(e.target.value)}
-              className="w-full bg-cream-50 border border-cream-300 text-charcoal-900 text-xs rounded-xl p-2.5 focus:ring-2 focus:ring-gold-500 focus:outline-none font-medium"
-            >
-              <option value="">System Standard Stimme</option>
-              {germanVoices.map((voice) => (
-                <option key={voice.voiceURI} value={voice.voiceURI}>
-                  {voice.name} ({voice.lang})
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={selectedVoiceURI}
+                onChange={(e) => setSelectedVoiceURI(e.target.value)}
+                className="w-full bg-cream-50 border border-cream-300 text-charcoal-900 text-xs rounded-xl p-3 pr-8 focus:ring-2 focus:ring-gold-500 focus:outline-none font-bold shadow-sm cursor-pointer"
+              >
+                <option value="">🎙️ Google Deutsch (Standard)</option>
+                <option value="de-DE-Standard-A">🇩🇪 Katja (Natürliche Frauenstimme)</option>
+                <option value="de-DE-Standard-B">🇩🇪 Stefan (Natürliche Männerstimme)</option>
+                <option value="de-DE-Wavenet-A">🇩🇪 Marlene (HQ Neural Voice)</option>
+                <option value="de-DE-Wavenet-B">🇩🇪 Hans (HQ Neural Voice)</option>
+                {germanVoices.map((voice) => (
+                  <option key={voice.voiceURI} value={voice.voiceURI}>
+                    🔊 {voice.name} ({voice.lang})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Footer & User / Stats */}
-        <div className="pt-5 border-t border-cream-300/60 space-y-3">
+        {/* Footer & User / Stats & Signout */}
+        <div className="pt-5 border-t border-cream-300/60 space-y-3 mt-6">
           <div className="bg-cream-200/90 rounded-2xl p-3 border border-cream-300/50 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <Sparkles size={16} className="text-gold-600" />
@@ -194,20 +210,31 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={onOpenLogin}
-            className="w-full flex items-center justify-between p-3 bg-cream-50 hover:bg-cream-200 rounded-2xl border border-cream-300 text-xs font-medium text-charcoal-900 transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-cream-900 text-cream-50 flex items-center justify-center font-bold">
-                <User size={15} />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenLogin}
+              className="flex-1 flex items-center justify-between p-3 bg-cream-50 hover:bg-cream-200 rounded-2xl border border-cream-300 text-xs font-medium text-charcoal-900 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-cream-900 text-cream-50 flex items-center justify-center font-bold">
+                  <User size={15} />
+                </div>
+                <div className="text-left min-w-0">
+                  <div className="font-bold text-charcoal-900 truncate max-w-[110px]">{currentUser ? currentUser.email : 'Admin Login'}</div>
+                  <div className="text-[10px] text-cream-800">Neon DB Sync</div>
+                </div>
               </div>
-              <div className="text-left">
-                <div className="font-bold text-charcoal-900">{currentUser ? currentUser.email : 'Admin Login'}</div>
-                <div className="text-[10px] text-cream-800">{currentUser ? 'Neon DB Sync active' : 'Click to authenticate'}</div>
-              </div>
-            </div>
-          </button>
+            </button>
+
+            <button
+              onClick={handleSignOut}
+              className="p-3 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-2xl border border-rose-200 transition-colors flex items-center gap-1 shrink-0 font-bold text-xs"
+              title="Abmelden (Sign Out)"
+            >
+              <LogOut size={16} />
+              <span>Abmelden</span>
+            </button>
+          </div>
         </div>
       </aside>
     </>

@@ -91,7 +91,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({
     }
   };
 
-  // Hover Lookup with accurate fixed viewport positioning (Right above the word!)
+  // Hover Lookup with viewport positioning right above word
   const handleWordHover = async (e: React.MouseEvent<HTMLSpanElement>, cleanWord: string, context?: string) => {
     if (!cleanWord || cleanWord.length < 2) return;
 
@@ -160,7 +160,6 @@ export const VocabTab: React.FC<VocabTabProps> = ({
           onMouseEnter={(e) => handleWordHover(e, cleanWord, context)}
           onMouseLeave={() => setHoverTooltip(null)}
           className="hover-word"
-          title="Hover: Übersetzung anzeigen"
         >
           {chunk}
         </span>

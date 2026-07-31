@@ -140,7 +140,6 @@ export const ReadingTab: React.FC<ReadingTabProps> = ({ onWordLeftClick }) => {
           onMouseEnter={(e) => handleWordHover(e, cleanWord)}
           onMouseLeave={handleWordMouseLeave}
           className="hover-word"
-          title="Links-Klick: KI Tutor fragen | Hover: Schnell-Übersetzung"
         >
           {chunk}
         </span>
