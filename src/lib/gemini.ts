@@ -1,8 +1,9 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
 
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
 // Unlimited generation config without any maxOutputTokens parameter
 const maxGenConfig = {};
@@ -10,6 +11,246 @@ const maxGenConfig = {};
 const jsonMaxGenConfig = {
   responseMimeType: 'application/json'
 };
+
+const sentenceSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    tenseOrCase: { type: SchemaType.STRING },
+    german: { type: SchemaType.STRING },
+    english: { type: SchemaType.STRING }
+  },
+  required: ['tenseOrCase', 'german', 'english']
+};
+
+const vocabCardSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    id: { type: SchemaType.STRING },
+    word: { type: SchemaType.STRING },
+    originalInText: { type: SchemaType.STRING },
+    article: { type: SchemaType.STRING, nullable: true },
+    plural: { type: SchemaType.STRING, nullable: true },
+    translation: { type: SchemaType.STRING },
+    level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },
+    type: { type: SchemaType.STRING, enum: ['verb', 'noun', 'adjective', 'idiom'] },
+    sentences: {
+      type: SchemaType.ARRAY,
+      items: sentenceSchema
+    },
+    conjugation: {
+      type: SchemaType.OBJECT,
+      nullable: true,
+      properties: {
+        praesens: {
+          type: SchemaType.OBJECT,
+          properties: {
+            ich: { type: SchemaType.STRING },
+            du: { type: SchemaType.STRING },
+            er_sie_es: { type: SchemaType.STRING },
+            wir: { type: SchemaType.STRING },
+            ihr: { type: SchemaType.STRING },
+            sie_Sie: { type: SchemaType.STRING }
+          }
+        },
+        praeteritum: {
+          type: SchemaType.OBJECT,
+          properties: {
+            ich: { type: SchemaType.STRING },
+            du: { type: SchemaType.STRING },
+            er_sie_es: { type: SchemaType.STRING },
+            wir: { type: SchemaType.STRING },
+            ihr: { type: SchemaType.STRING },
+            sie_Sie: { type: SchemaType.STRING }
+          }
+        },
+        perfekt: {
+          type: SchemaType.OBJECT,
+          properties: {
+            hilfsverb: { type: SchemaType.STRING, enum: ['haben', 'sein'] },
+            partizip_ii: { type: SchemaType.STRING }
+          }
+        }
+      }
+    },
+    declension: {
+      type: SchemaType.OBJECT,
+      nullable: true,
+      properties: {
+        nominativ: { type: SchemaType.STRING },
+        akkusativ: { type: SchemaType.STRING },
+        dativ: { type: SchemaType.STRING },
+        genitiv: { type: SchemaType.STRING },
+        plural: { type: SchemaType.STRING }
+      }
+    }
+  },
+  required: ['word', 'originalInText', 'translation', 'level', 'type', 'sentences']
+};
+
+const extractionListSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    verbs: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          lemma: { type: SchemaType.STRING },
+          originalInText: { type: SchemaType.STRING },
+          translation: { type: SchemaType.STRING },
+          level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] }
+        },
+        required: ['lemma', 'originalInText', 'translation', 'level']
+      }
+    },
+    nouns: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          lemma: { type: SchemaType.STRING },
+          originalInText: { type: SchemaType.STRING },
+          article: { type: SchemaType.STRING, enum: ['der', 'die', 'das'] },
+          plural: { type: SchemaType.STRING },
+          translation: { type: SchemaType.STRING },
+          level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] }
+        },
+        required: ['lemma', 'originalInText', 'article', 'plural', 'translation', 'level']
+      }
+    },
+    adjectives: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          lemma: { type: SchemaType.STRING },
+          originalInText: { type: SchemaType.STRING },
+          translation: { type: SchemaType.STRING },
+          level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] }
+        },
+        required: ['lemma', 'originalInText', 'translation', 'level']
+      }
+    },
+    idioms: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          lemma: { type: SchemaType.STRING },
+          originalInText: { type: SchemaType.STRING },
+          translation: { type: SchemaType.STRING },
+          level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] }
+        },
+        required: ['lemma', 'originalInText', 'translation', 'level']
+      }
+    }
+  },
+  required: ['verbs', 'nouns', 'adjectives', 'idioms']
+};
+
+const cardBatchSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    cards: {
+      type: SchemaType.ARRAY,
+      items: vocabCardSchema
+    }
+  },
+  required: ['cards']
+};
+
+type VocabCategory = 'verbs' | 'nouns' | 'adjectives' | 'idioms';
+
+type ExtractedLemma = {
+  lemma: string;
+  originalInText: string;
+  article?: string | null;
+  plural?: string | null;
+  translation: string;
+  level: string;
+  type: 'verb' | 'noun' | 'adjective' | 'idiom';
+};
+
+function makeJsonModel(responseSchema?: any) {
+  return genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      ...(responseSchema ? { responseSchema } : {})
+    }
+  });
+}
+
+function parseJsonResponse(text: string) {
+  const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+  return JSON.parse(cleanText);
+}
+
+function chunkTextBySentences(text: string, maxChars = 4500): string[] {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+
+  const sentences = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [normalized];
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const sentence of sentences) {
+    const next = current ? `${current} ${sentence.trim()}` : sentence.trim();
+    if (next.length > maxChars && current) {
+      chunks.push(current);
+      current = sentence.trim();
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function normalizeLemmaKey(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function uniqueLemmas(lemmas: ExtractedLemma[]) {
+  const seen = new Set<string>();
+  return lemmas.filter((item) => {
+    const key = `${item.type}:${normalizeLemmaKey(item.lemma)}`;
+    if (!item.lemma || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function groupCards(cards: any[], title: string) {
+  const timestamp = Date.now();
+  const data: Record<string, any> = {
+    title,
+    verbs: [],
+    nouns: [],
+    adjectives: [],
+    idioms: []
+  };
+
+  cards.forEach((item, idx) => {
+    const type = item?.type;
+    const category = type === 'verb' ? 'verbs' : type === 'noun' ? 'nouns' : type === 'adjective' ? 'adjectives' : type === 'idiom' ? 'idioms' : null;
+    if (!category) return;
+
+    data[category].push({
+      ...item,
+      id: item.id || `p_${type}_${timestamp}_${idx}`,
+      sentences: Array.isArray(item.sentences) ? item.sentences.slice(0, 5) : []
+    });
+  });
+
+  return data;
+}
 
 // Server-side in-memory dictionary lookup cache
 const dictCache = new Map<string, any>();
@@ -32,7 +273,7 @@ async function fetchGoogleTranslation(text: string): Promise<string> {
 }
 
 export async function generateReadingPassage(topic: string, vocabList: string[]) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
   const prompt = `
 You are an expert German language author creating engaging reading comprehension materials for intermediate-to-advanced learners.
 Generate a real-world reading passage about "${topic}".
@@ -109,7 +350,7 @@ Return ONLY a valid JSON object with the following schema:
 }
 
 export async function gradeReadingPassage(passageContent: string, questions: any[], userAnswers: Record<string, string>) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
   const prompt = `
 Grade this German reading quiz.
 Passage: "${passageContent.slice(0, 300)}..."
@@ -165,7 +406,7 @@ export async function lookupWordContext(word: string, contextSentence?: string) 
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
     const prompt = `
 Translate and define the German word or phrase "${word}".
 Sentence context: "${contextSentence || ''}"
@@ -210,8 +451,93 @@ Return ONLY a valid JSON object with exact schema:
 }
 
 export async function extractCardsFromParagraph(rawText: string, customTitle?: string) {
+  try {
+    const title = customTitle || 'German Paragraph Extraction';
+    const chunks = chunkTextBySentences(rawText);
+    const extractor = makeJsonModel(extractionListSchema);
+    const allLemmas: ExtractedLemma[] = [];
+
+    for (const [index, chunk] of chunks.entries()) {
+      const prompt = `
+You are a strict German linguistic extractor.
+Extract lemmas that actually appear in this German text chunk. Do not invent words.
+
+Rules:
+- Include every lexical verb, noun, adjective, and fixed idiom/phrase in this chunk.
+- Normalize verbs to infinitive, nouns to singular nominative, adjectives to base positive form.
+- Exclude purely grammatical helper words, names, punctuation, numbers, articles, pronouns, determiners, conjunctions, and prepositions.
+- originalInText must be the exact form from the text.
+- Return empty arrays for categories that are not present.
+
+Chunk ${index + 1} of ${chunks.length}:
+${chunk}
+`;
+
+      const result = await extractor.generateContent(prompt);
+      const parsed = parseJsonResponse(result.response.text());
+
+      (['verbs', 'nouns', 'adjectives', 'idioms'] as VocabCategory[]).forEach((category) => {
+        const type = category === 'verbs' ? 'verb' : category === 'nouns' ? 'noun' : category === 'adjectives' ? 'adjective' : 'idiom';
+        const items = Array.isArray(parsed[category]) ? parsed[category] : [];
+        items.forEach((item: any) => {
+          allLemmas.push({
+            lemma: String(item.lemma || '').trim(),
+            originalInText: String(item.originalInText || item.lemma || '').trim(),
+            article: item.article || null,
+            plural: item.plural || null,
+            translation: String(item.translation || '').trim(),
+            level: item.level || 'B1',
+            type
+          });
+        });
+      });
+    }
+
+    const lemmas = uniqueLemmas(allLemmas);
+    const cards: any[] = [];
+    const cardGenerator = makeJsonModel(cardBatchSchema);
+
+    for (let i = 0; i < lemmas.length; i += 10) {
+      const batch = lemmas.slice(i, i + 10);
+      const prompt = `
+Create complete German learning flashcards for these extracted vocabulary items.
+Use only the provided item list; do not add unrelated words.
+
+For every item:
+- word is the lemma.
+- originalInText must stay exactly as provided.
+- Create exactly 5 sentence objects.
+- For verbs, include tenses: Praesens, Praeteritum, Perfekt, Futur I, Konjunktiv II, plus conjugation.
+- For nouns, include cases: Nominativ, Akkusativ, Dativ, Genitiv, Plural, plus article, plural, and declension.
+- For adjectives, include: Positiv, Komparativ, Superlativ, Praedikativ, Attributiv.
+- For idioms, include five natural examples.
+- German sentences must be natural and useful for a German learner; English translations must be accurate.
+
+Items:
+${JSON.stringify(batch)}
+`;
+
+      const result = await cardGenerator.generateContent(prompt);
+      const parsed = parseJsonResponse(result.response.text());
+      if (Array.isArray(parsed.cards)) cards.push(...parsed.cards);
+    }
+
+    return groupCards(cards, title);
+  } catch (err: any) {
+    console.error('extractCardsFromParagraph error:', err);
+    return {
+      title: customTitle || 'Deutscher Text Extrakt',
+      verbs: [],
+      nouns: [],
+      adjectives: [],
+      idioms: []
+    };
+  }
+}
+
+async function unusedLegacyExtractCardsFromParagraph(rawText: string, customTitle?: string) {
   const model = genAI.getGenerativeModel({ 
-    model: 'gemini-1.5-flash',
+    model: GEMINI_MODEL,
     generationConfig: jsonMaxGenConfig
   });
 
@@ -386,7 +712,7 @@ Expected JSON Structure:
 }
 
 export async function chatWithBot(userMessage: string, selectedWord?: string) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: maxGenConfig });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: maxGenConfig });
   const prompt = `
 You are "DeutschMeister AI Tutor", an intelligent German language teacher.
 User Message: "${userMessage}"
@@ -409,7 +735,7 @@ Respond directly in friendly German with English translations for complex phrase
 }
 
 export async function gradeWritingSubmission(promptEnglish: string, userGermanText: string) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
   const prompt = `
 You are a German language teacher grading a student's writing exercise.
 Prompt: "${promptEnglish}"
@@ -445,7 +771,7 @@ Return ONLY a valid JSON object with:
 }
 
 export async function generateListeningDialogueAndQuiz(topic: string) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
   const prompt = `
 Generate a natural 2-person German audio conversation dialogue about "${topic}".
 Then generate exactly 15 multiple-choice questions testing comprehension of this dialogue.
@@ -501,17 +827,45 @@ Return ONLY a valid JSON object with schema:
 export async function generateVocabFromYoutubeTranscript(videoUrl: string, manualTranscript?: string) {
   let officialTranscript = manualTranscript?.trim() || await fetchFullYoutubeTranscript(videoUrl);
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
+  if (!officialTranscript) {
+    return {
+      videoTitle: 'Deutsches YouTube Video',
+      videoUrl,
+      transcript: '',
+      extractedVocab: [],
+      warning: 'Kein deutsches YouTube-Transkript gefunden. Fuege bitte das offizielle deutsche Transkript manuell ein.'
+    };
+  }
+
+  const cardFolders = await extractCardsFromParagraph(officialTranscript, 'YouTube Extract');
+  const extractedVocab = [
+    ...(cardFolders.verbs || []),
+    ...(cardFolders.nouns || []),
+    ...(cardFolders.adjectives || []),
+    ...(cardFolders.idioms || [])
+  ].map((item: any) => ({
+    ...item,
+    category: 'YouTube Extract'
+  }));
+
+  return {
+    videoTitle: 'Deutsches YouTube Video',
+    videoUrl,
+    transcript: officialTranscript,
+    extractedVocab
+  };
+
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
 
   const prompt = `
 You are a German curriculum expert analyzing a German YouTube video:
 URL: "${videoUrl}"
-${officialTranscript ? `OFFICIAL FULL GERMAN TRANSCRIPT:\n"${officialTranscript.slice(0, 15000)}"` : ''}
+${officialTranscript ? `OFFICIAL FULL GERMAN TRANSCRIPT:\n"${(officialTranscript || '').slice(0, 15000)}"` : ''}
 
 INSTRUCTIONS:
 1. Provide the German Title for this video.
-2. ${officialTranscript ? 'Use the exact official full German transcript provided above.' : 'Generate the FULL, untruncated German transcript captions (in German language only). Do NOT summarize or shorten the transcript.'}
-3. Extract exactly 6 key vocabulary items (3 Verbs and 3 Nouns) from this transcript.
+2. ${officialTranscript ? 'Use the exact official full German transcript provided above.' : 'Use the transcript exactly as provided by the caller.'}
+3. Extract vocabulary items from this transcript.
 4. For each word, generate 5 example sentences (showing tenses/cases), translation, article, type ("verb" or "noun"), and conjugation/declension tables.
 
 Return ONLY a valid JSON object:
