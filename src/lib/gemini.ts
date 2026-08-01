@@ -1,4 +1,5 @@
 import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
+import crypto from 'crypto';
 
 type GeminiPart =
   | { text: string }
@@ -25,9 +26,93 @@ function vertexHost() {
 export const VERTEX_GEMINI_MODEL = process.env.VERTEX_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 export const VERTEX_GEMINI_FAST_MODEL = process.env.VERTEX_GEMINI_FAST_MODEL || 'gemini-3.5-flash-lite';
 
+async function getAccessTokenFromServiceAccount(clientEmail: string, privateKey: string): Promise<string> {
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + 3600;
+
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT'
+  };
+
+  const claim = {
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp,
+    iat
+  };
+
+  const b64 = (obj: any) =>
+    Buffer.from(JSON.stringify(obj))
+      .toString('base64')
+      .replace(/=/g, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
+
+  const sigInput = `${b64(header)}.${b64(claim)}`;
+  
+  const sign = crypto.createSign('RSA-SHA256');
+  sign.update(sigInput);
+  const signature = sign.sign(privateKey, 'base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+
+  const jwt = `${sigInput}.${signature}`;
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt
+    })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to exchange JWT for GCP access token: ${text}`);
+  }
+
+  const data = (await res.json()) as { access_token?: string };
+  if (!data.access_token) {
+    throw new Error('GCP access token response did not include access_token.');
+  }
+
+  return data.access_token;
+}
+
 async function accessToken() {
   const configured = process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
   if (configured) return configured;
+
+  // Try generating from service account JSON environment variable
+  const saKeyJson = process.env.GCP_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (saKeyJson) {
+    try {
+      const credentials = JSON.parse(saKeyJson);
+      if (credentials.client_email && credentials.private_key) {
+        return await getAccessTokenFromServiceAccount(credentials.client_email, credentials.private_key);
+      }
+    } catch (e) {
+      console.error('Error generating OAuth token from GCP_SERVICE_ACCOUNT_KEY:', e);
+    }
+  }
+
+  // Fallback to checking individual env variables
+  const clientEmail = process.env.GCP_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = process.env.GCP_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY;
+  if (clientEmail && privateKey) {
+    try {
+      const formattedKey = privateKey.replace(/\\n/g, '\n');
+      return await getAccessTokenFromServiceAccount(clientEmail, formattedKey);
+    } catch (e) {
+      console.error('Error generating OAuth token from GCP_CLIENT_EMAIL/GCP_PRIVATE_KEY:', e);
+    }
+  }
 
   try {
     const res = await fetch(
