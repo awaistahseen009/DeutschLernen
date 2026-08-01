@@ -24,6 +24,83 @@ async function fetchGoogleTranslation(text: string): Promise<string> {
   return text;
 }
 
+export async function generateReadingPassage(topic: string, vocabList: string[]) {
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const prompt = `
+You are an expert German language author creating engaging reading comprehension materials for intermediate-to-advanced learners.
+Generate a real-world reading passage about "${topic}".
+Include vocabulary from this list: ${vocabList.slice(0, 15).join(', ')} along with advanced B2 vocabulary.
+CRITICAL CONSTRAINT: Do NOT state or mention the CEFR level anywhere in the text or output.
+
+Return ONLY a valid JSON object with the following schema:
+{
+  "title": "German title of passage",
+  "content": "Full German passage text (3-4 rich paragraphs)",
+  "topic": "${topic}",
+  "questions": [
+    {
+      "id": "q1",
+      "questionGerman": "Question in German",
+      "options": ["A) Option 1", "B) Option 2", "C) Option 3", "D) Option 4"],
+      "correctAnswer": "A",
+      "explanation": "Brief explanation in English and German"
+    }
+  ]
+}
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanText);
+  } catch (err: any) {
+    console.error('Gemini generateReadingPassage error:', err);
+    return {
+      title: `Aktuelles aus ${topic}: Moderne Trends in Deutschland`,
+      content: `In der heutigen Gesellschaft spielen Themen wie Digitalisierung, Umweltschutz und soziale Gerechtigkeit eine immer wichtigere Rolle. Viele Menschen bemühen sich täglich, nachhaltige Entscheidungen zu treffen und neue Technologien in ihren Alltag zu integrieren. Während einige Experten die schnellen Veränderungen als große Herausforderung betrachten, sehen andere darin fantastische Chancen für die Zukunft. Das Stadtleben verändert sich stetig, und auch auf dem Land entstehen neue Arbeitsmöglichkeiten.`,
+      topic,
+      questions: [
+        {
+          id: 'q1',
+          questionGerman: 'Was spielt in der heutigen Gesellschaft eine immer wichtigere Rolle?',
+          options: ['A) Nur das Stadtleben', 'B) Digitalisierung und Umweltschutz', 'C) Weniger Technologie', 'D) Altes Brauchtum'],
+          correctAnswer: 'B',
+          explanation: 'Der Text nennt Digitalisierung, Umweltschutz und soziale Gerechtigkeit als zentrale Rolle.'
+        },
+        {
+          id: 'q2',
+          questionGerman: 'Wie betrachten einige Experten die schnellen Veränderungen?',
+          options: ['A) Als unbedeutend', 'B) Als große Herausforderung', 'C) Als langweilig', 'D) Als fehlerhaft'],
+          correctAnswer: 'B',
+          explanation: 'Im Text steht: "...betrachten die schnellen Veränderungen als große Herausforderung".'
+        },
+        {
+          id: 'q3',
+          questionGerman: 'Was entsteht auf dem Land?',
+          options: ['A) Neue Arbeitsmöglichkeiten', 'B) Mehr Stau', 'C) Weniger Natur', 'D) Keine Schulen'],
+          correctAnswer: 'A',
+          explanation: 'Der Text erwähnt: "...auch auf dem Land entstehen neue Arbeitsmöglichkeiten".'
+        },
+        {
+          id: 'q4',
+          questionGerman: 'Was versuchen viele Menschen täglich zu treffen?',
+          options: ['A) Unüberlegte Urteile', 'B) Nachhaltige Entscheidungen', 'C) Keine Pläne', 'D) Falsche Tipps'],
+          correctAnswer: 'B',
+          explanation: 'Der Text besagt, dass Menschen versuchen, nachhaltige Entscheidungen zu treffen.'
+        },
+        {
+          id: 'q5',
+          questionGerman: 'Welche zwei Lebensräume werden im Text verglichen?',
+          options: ['A) Schule und Uni', 'B) Stadtleben und Landleben', 'C) Beruf und Urlaub', 'D) Sommer und Winter'],
+          correctAnswer: 'B',
+          explanation: 'Im Text werden Stadtleben und Leben auf dem Land erwähnt.'
+        }
+      ]
+    };
+  }
+}
+
 export async function lookupWordContext(word: string, contextSentence?: string) {
   const cleanWord = word.trim().toLowerCase();
   const cacheKey = `${cleanWord}_${contextSentence?.slice(0, 30) || 'default'}`;
