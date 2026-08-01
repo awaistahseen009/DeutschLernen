@@ -17,7 +17,7 @@ const fallbackGenAI = geminiApiKeys.length > 0
   ? new GoogleGenerativeAI(geminiApiKeys[0])
   : new GoogleGenerativeAI('');
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
 // Unlimited generation config without any maxOutputTokens parameter
 const maxGenConfig = {};
@@ -194,7 +194,7 @@ function getModel(modelName: string = GEMINI_MODEL, config: any = {}) {
     });
   } catch {
     return fallbackGenAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: GEMINI_MODEL,
       generationConfig: config
     });
   }
