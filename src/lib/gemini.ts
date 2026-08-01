@@ -969,10 +969,10 @@ export async function generateVocabFromYoutubeTranscript(videoUrl: string, manua
 
   const cardFolders = await extractCardsFromParagraph(officialTranscript, 'YouTube Extract');
   const extractedVocab = [
-    ...(cardFolders.verbs || []),
-    ...(cardFolders.nouns || []),
-    ...(cardFolders.adjectives || []),
-    ...(cardFolders.idioms || [])
+    ...(cardFolders?.verbs || []),
+    ...(cardFolders?.nouns || []),
+    ...(cardFolders?.adjectives || []),
+    ...(cardFolders?.idioms || [])
   ].map((item: any) => ({
     ...item,
     category: 'YouTube Extract'
