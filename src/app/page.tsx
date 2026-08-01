@@ -225,7 +225,7 @@ export default function Home() {
         )}
 
         {activeTab === 'call' && (
-          <CallTab selectedVoiceURI={selectedVoiceURI} />
+          <CallTab selectedVoiceURI={selectedVoiceURI} germanVoices={germanVoices} />
         )}
 
         {activeTab === 'favorites' && (

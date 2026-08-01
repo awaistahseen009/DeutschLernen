@@ -90,7 +90,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       {/* Sidebar Container */}
       <aside className={`
         fixed top-0 left-0 bottom-0 z-40 w-80 bg-cream-100 border-r border-cream-300/80 p-6 flex flex-col justify-between
-        transform transition-transform duration-300 ease-in-out overflow-y-auto
+        transform transition-transform duration-300 ease-in-out overflow-y-auto overflow-x-hidden
         ${isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Brand Header */}

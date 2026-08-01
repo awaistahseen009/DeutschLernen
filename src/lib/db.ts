@@ -113,6 +113,27 @@ export async function initDbSchema() {
       result_json JSONB NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS call_settings (
+      id SERIAL PRIMARY KEY,
+      user_id UUID UNIQUE,
+      level VARCHAR(10) DEFAULT 'B1',
+      persona VARCHAR(50) DEFAULT 'friendly',
+      custom_system_prompt TEXT DEFAULT '',
+      voice_uri TEXT,
+      speech_rate REAL DEFAULT 1.0,
+      memory_enabled BOOLEAN DEFAULT TRUE,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS call_memory_summaries (
+      id SERIAL PRIMARY KEY,
+      user_id UUID,
+      summary TEXT NOT NULL,
+      message_count INT NOT NULL,
+      pinecone_stored BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
   `;
 
   try {

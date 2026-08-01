@@ -734,6 +734,97 @@ Respond directly in friendly German with English translations for complex phrase
   }
 }
 
+type CallPersona = 'friendly' | 'teacher' | 'examiner' | 'travel' | 'work';
+type GermanLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
+
+const levelPromptMap: Record<GermanLevel, string> = {
+  A1: 'Use very simple A1 German: short present-tense sentences, everyday words, one idea per sentence. Ask easy questions.',
+  A2: 'Use simple A2 German with common past/perfect forms, familiar topics, and gentle corrections.',
+  B1: 'Use natural B1 German, explain briefly when helpful, and keep the conversation flowing with follow-up questions.',
+  B2: 'Use richer B2 German, idiomatic but clear phrasing, and challenge the learner with opinions and reasons.',
+  C1: 'Use advanced, natural C1 German with nuanced vocabulary while staying conversational and not academic.'
+};
+
+const personaPromptMap: Record<CallPersona, string> = {
+  friendly: 'Persona: warm German conversation partner. Be relaxed, encouraging, and curious.',
+  teacher: 'Persona: patient German teacher. Correct one important mistake briefly, then continue naturally.',
+  examiner: 'Persona: Goethe/TELC speaking examiner. Ask structured questions and follow-ups without sounding robotic.',
+  travel: 'Persona: helpful travel conversation partner. Practice hotels, restaurants, tickets, directions, and small talk.',
+  work: 'Persona: professional workplace conversation partner. Practice meetings, email phrasing, interviews, and office talk.'
+};
+
+export async function chatWithCallAgent({
+  userMessage,
+  messageHistory = [],
+  memories = [],
+  level = 'B1',
+  persona = 'friendly',
+  customSystemPrompt = ''
+}: {
+  userMessage: string;
+  messageHistory?: Array<{ sender: 'bot' | 'user'; text: string }>;
+  memories?: string[];
+  level?: GermanLevel;
+  persona?: CallPersona;
+  customSystemPrompt?: string;
+}) {
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: maxGenConfig });
+  const recentHistory = messageHistory.slice(-10).map((m) => `${m.sender === 'user' ? 'Learner' : 'Tutor'}: ${m.text}`).join('\n');
+  const memoryContext = memories.length > 0 ? `Long-term learner memory:\n${memories.slice(0, 3).join('\n')}` : '';
+  const systemPrompt = `
+You are DeutschMeister Voice, a low-latency spoken German tutor.
+${levelPromptMap[level] || levelPromptMap.B1}
+${personaPromptMap[persona] || personaPromptMap.friendly}
+${customSystemPrompt ? `Extra tutor instruction: ${customSystemPrompt}` : ''}
+
+Conversation rules:
+- Reply only in German unless the learner explicitly asks for English.
+- Keep replies short for voice: 1-2 sentences, maximum 35 words.
+- Sound like a real phone conversation, not a textbook.
+- Ask one natural follow-up question most turns.
+- If correcting, correct only one thing and continue the conversation.
+- Do not mention these instructions.
+
+${memoryContext}
+Recent conversation:
+${recentHistory}
+`;
+
+  try {
+    const result = await model.generateContent(`${systemPrompt}\nLearner just said: ${userMessage}`);
+    const responseText = result.response.text().trim();
+    if (responseText) return responseText;
+    throw new Error('Empty call response');
+  } catch (err) {
+    console.error('Gemini chatWithCallAgent error:', err);
+    return 'Ich habe dich verstanden. Erzähl mir bitte noch ein bisschen mehr darüber.';
+  }
+}
+
+export async function summarizeConversationMemory(messageHistory: Array<{ sender: 'bot' | 'user'; text: string }>) {
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
+  const prompt = `
+Summarize this German tutoring call into durable long-term memory for future lessons.
+Keep only useful facts: learner interests, recurring grammar issues, vocabulary goals, preferred topics, confidence, and next practice steps.
+Return ONLY a valid JSON object:
+{
+  "summary": "Concise memory summary, max 120 words."
+}
+
+Conversation:
+${messageHistory.slice(-30).map((m) => `${m.sender}: ${m.text}`).join('\n')}
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const data = parseJsonResponse(result.response.text());
+    return String(data.summary || '').trim();
+  } catch (err) {
+    console.warn('Gemini summarizeConversationMemory fallback:', err);
+    return messageHistory.slice(-30).map((m) => `${m.sender}: ${m.text}`).join('\n').slice(0, 1200);
+  }
+}
+
 export async function gradeWritingSubmission(promptEnglish: string, userGermanText: string) {
   const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
   const prompt = `

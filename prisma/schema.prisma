@@ -19,6 +19,8 @@ model User {
   writingSubmissions WritingSubmission[]
   listeningResults   ListeningResult[]
   youtubeTranscripts YoutubeTranscript[]
+  callSettings       CallSettings?
+  callMemorySummaries CallMemorySummary[]
 
   @@map("users")
 }
@@ -112,4 +114,31 @@ model YoutubeTranscript {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("youtube_transcripts")
+}
+
+model CallSettings {
+  id                 Int      @id @default(autoincrement())
+  userId             String   @unique @map("user_id")
+  level              String   @default("B1")
+  persona            String   @default("friendly")
+  customSystemPrompt String   @default("") @map("custom_system_prompt") @db.Text
+  voiceUri           String?  @map("voice_uri") @db.Text
+  speechRate         Float    @default(1.0) @map("speech_rate")
+  memoryEnabled      Boolean  @default(true) @map("memory_enabled")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("call_settings")
+}
+
+model CallMemorySummary {
+  id             Int      @id @default(autoincrement())
+  userId         String   @map("user_id")
+  summary        String   @db.Text
+  messageCount   Int      @map("message_count")
+  pineconeStored Boolean  @default(false) @map("pinecone_stored")
+  createdAt      DateTime @default(now()) @map("created_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("call_memory_summaries")
 }

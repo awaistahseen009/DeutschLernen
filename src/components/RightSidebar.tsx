@@ -127,33 +127,33 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       {/* Right Sidebar Drawer */}
       <aside className={`
         fixed top-0 right-0 bottom-0 z-40 w-full sm:w-96 bg-cream-100 border-l border-cream-300/80 p-5 flex flex-col justify-between
-        transform transition-transform duration-300 ease-in-out shadow-2xl
+        transform transition-transform duration-300 ease-in-out shadow-2xl overflow-x-hidden
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
         {/* Sidebar Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-cream-300/60">
-          <div className="flex items-center gap-2 bg-cream-200 p-1 rounded-2xl border border-cream-300/50">
+        <div className="flex items-center justify-between gap-2 pb-4 border-b border-cream-300/60 min-w-0">
+          <div className="flex items-center gap-2 bg-cream-200 p-1 rounded-2xl border border-cream-300/50 min-w-0 flex-1">
             <button
               onClick={() => setActiveRightTab('grammar')}
               className={`
-                px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5
+                px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 flex-1
                 ${activeRightTab === 'grammar' 
                   ? 'bg-cream-900 text-gold-400 shadow-sm' 
                   : 'text-charcoal-800 hover:text-charcoal-900'}
               `}
             >
-              <BookMarked size={14} /> Grammatik / Form
+              <BookMarked size={14} className="shrink-0" /> <span className="truncate">Grammatik</span>
             </button>
             <button
               onClick={() => setActiveRightTab('chatbot')}
               className={`
-                px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5
+                px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 flex-1
                 ${activeRightTab === 'chatbot' 
                   ? 'bg-cream-900 text-gold-400 shadow-sm' 
                   : 'text-charcoal-800 hover:text-charcoal-900'}
               `}
             >
-              <Bot size={14} /> KI Tutor Chat
+              <Bot size={14} className="shrink-0" /> <span className="truncate">KI Chat</span>
             </button>
           </div>
 
@@ -168,7 +168,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
         {/* Tab 1: Verb Conjugations / Noun Declensions */}
         {activeRightTab === 'grammar' && (
-          <div className="flex-1 overflow-y-auto my-4 pr-1 space-y-5">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden my-4 pr-1 space-y-5">
             {/* VERB CONJUGATIONS */}
             {verb && conj && (
               <div>
@@ -277,8 +277,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
         {/* Tab 2: AI Chatbot */}
         {activeRightTab === 'chatbot' && (
-          <div className="flex-1 flex flex-col my-4 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          <div className="flex-1 flex flex-col my-4 min-h-0 min-w-0">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pr-1">
               {messages.map((msg) => (
                 <div
                   key={msg.id}
@@ -294,7 +294,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                       <Sparkles size={12} /> KI Deutsch-Tutor
                     </div>
                   )}
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                  <div className="whitespace-pre-wrap break-words">{msg.text}</div>
                 </div>
               ))}
               {isLoading && (
