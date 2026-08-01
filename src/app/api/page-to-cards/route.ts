@@ -4,6 +4,8 @@ import { query, initDbSchema } from '@/lib/db';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   try {
     const { rawText, customTitle } = await request.json();
