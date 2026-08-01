@@ -5,6 +5,7 @@ import { VOCAB_DATABASE, VocabItem } from '@/data/vocabData';
 import { LeftSidebar } from '@/components/LeftSidebar';
 import { RightSidebar } from '@/components/RightSidebar';
 import { VocabTab } from '@/components/VocabTab';
+import { PageToCardsTab } from '@/components/PageToCardsTab';
 import { YoutubeTab } from '@/components/YoutubeTab';
 import { ReadingTab } from '@/components/ReadingTab';
 import { ExercisesTab } from '@/components/ExercisesTab';
@@ -14,7 +15,7 @@ import { LoginModal } from '@/components/LoginModal';
 import { Loader2 } from 'lucide-react';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'vocab' | 'youtube' | 'reading' | 'exercises' | 'call' | 'favorites'>('vocab');
+  const [activeTab, setActiveTab] = useState<'vocab' | 'page-to-cards' | 'youtube' | 'reading' | 'exercises' | 'call' | 'favorites'>('vocab');
   const [selectedLevel, setSelectedLevel] = useState<string>('ALL');
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
   const [germanVoices, setGermanVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -177,6 +178,23 @@ export default function Home() {
               setIsRightOpen(true);
             }}
             selectedVoiceURI={selectedVoiceURI}
+          />
+        )}
+
+        {activeTab === 'page-to-cards' && (
+          <PageToCardsTab
+            selectedVoiceURI={selectedVoiceURI}
+            onSelectVocab={(item) => {
+              setSelectedVocab(item);
+              setIsRightOpen(true);
+            }}
+            onAppendCustomVocab={(items) => {
+              setCustomVocab(prev => [...prev, ...items]);
+            }}
+            learnedIds={learnedIds}
+            favorites={favorites}
+            onToggleLearned={handleToggleLearned}
+            onToggleFavorite={handleToggleFavorite}
           />
         )}
 

@@ -104,6 +104,15 @@ export async function initDbSchema() {
       vocab_json JSONB NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS text_projects (
+      id SERIAL PRIMARY KEY,
+      user_id UUID,
+      title VARCHAR(255) NOT NULL,
+      raw_text TEXT NOT NULL,
+      result_json JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
   `;
 
   try {

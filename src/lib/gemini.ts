@@ -79,99 +79,98 @@ Return ONLY a valid JSON object with exact schema:
   }
 }
 
-export async function generateReadingPassage(topic: string, vocabList: string[]) {
+export async function extractCardsFromParagraph(rawText: string, customTitle?: string) {
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  const prompt = `
-You are an expert German language author creating engaging reading comprehension materials for intermediate-to-advanced learners.
-Generate a real-world reading passage about "${topic}".
-Include vocabulary from this list: ${vocabList.slice(0, 15).join(', ')} along with advanced B2 vocabulary.
-CRITICAL CONSTRAINT: Do NOT state or mention the CEFR level anywhere in the text or output.
 
-Return ONLY a valid JSON object with the following schema:
+  const prompt = `
+You are a German linguistic expert analyzing this text paragraph:
+"${rawText}"
+
+CRITICAL INSTRUCTIONS:
+- Analyze EVERY single verb, noun, adjective, and idiom/phrase present in the text without omitting any item!
+- Organize the output into 4 separate folders: "verbs", "nouns", "adjectives", and "idioms".
+- For EACH item, provide:
+  1. Base form / Infinitiv / Lemma.
+  2. Original form as it appeared in the text.
+  3. Article (for nouns: der / die / das).
+  4. English translation.
+  5. Exactly 5 example sentences (with English translation and tense/case label).
+  6. Conjugation / declension notes.
+
+Return ONLY a valid JSON object matching this schema:
 {
-  "title": "German title of passage",
-  "content": "Full German passage text (3-4 rich paragraphs)",
-  "topic": "${topic}",
-  "questions": [
+  "title": "${customTitle || 'German Paragraph Extraction'}",
+  "verbs": [
     {
-      "id": "q1",
-      "questionGerman": "Question in German",
-      "options": ["A) Option 1", "B) Option 2", "C) Option 3", "D) Option 4"],
-      "correctAnswer": "A",
-      "explanation": "Brief explanation in English and German"
-    }
-  ]
-}
-`;
-
-  try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanText);
-  } catch (err: any) {
-    console.error('Gemini generateReadingPassage error:', err);
-    return {
-      title: `Aktuelles aus ${topic}: Moderne Trends in Deutschland`,
-      content: `In der heutigen Gesellschaft spielen Themen wie Digitalisierung, Umweltschutz und soziale Gerechtigkeit eine immer wichtigere Rolle. Viele Menschen bemühen sich täglich, nachhaltige Entscheidungen zu treffen und neue Technologien in ihren Alltag zu integrieren. Während einige Experten die schnellen Veränderungen als große Herausforderung betrachten, sehen andere darin fantastische Chancen für die Zukunft. Das Stadtleben verändert sich stetig, und auch auf dem Land entstehen neue Arbeitsmöglichkeiten.`,
-      topic,
-      questions: [
-        {
-          id: 'q1',
-          questionGerman: 'Was spielt in der heutigen Gesellschaft eine immer wichtigere Rolle?',
-          options: ['A) Nur das Stadtleben', 'B) Digitalisierung und Umweltschutz', 'C) Weniger Technologie', 'D) Altes Brauchtum'],
-          correctAnswer: 'B',
-          explanation: 'Der Text nennt Digitalisierung, Umweltschutz und soziale Gerechtigkeit als zentrale Rolle.'
-        },
-        {
-          id: 'q2',
-          questionGerman: 'Wie betrachten einige Experten die schnellen Veränderungen?',
-          options: ['A) Als unbedeutend', 'B) Als große Herausforderung', 'C) Als langweilig', 'D) Als fehlerhaft'],
-          correctAnswer: 'B',
-          explanation: 'Im Text steht: "...betrachten die schnellen Veränderungen als große Herausforderung".'
-        },
-        {
-          id: 'q3',
-          questionGerman: 'Was entsteht auf dem Land?',
-          options: ['A) Neue Arbeitsmöglichkeiten', 'B) Mehr Stau', 'C) Weniger Natur', 'D) Keine Schulen'],
-          correctAnswer: 'A',
-          explanation: 'Der Text erwähnt: "...auch auf dem Land entstehen neue Arbeitsmöglichkeiten".'
-        },
-        {
-          id: 'q4',
-          questionGerman: 'Was versuchen viele Menschen täglich zu treffen?',
-          options: ['A) Unüberlegte Urteile', 'B) Nachhaltige Entscheidungen', 'C) Keine Pläne', 'D) Falsche Tipps'],
-          correctAnswer: 'B',
-          explanation: 'Der Text besagt, dass Menschen versuchen, nachhaltige Entscheidungen zu treffen.'
-        },
-        {
-          id: 'q5',
-          questionGerman: 'Welche zwei Lebensräume werden im Text verglichen?',
-          options: ['A) Schule und Uni', 'B) Stadtleben und Landleben', 'C) Beruf und Urlaub', 'D) Sommer und Winter'],
-          correctAnswer: 'B',
-          explanation: 'Im Text werden Stadtleben und Leben auf dem Land erwähnt.'
-        }
+      "id": "p_v_1",
+      "word": "base infinitiv verb",
+      "originalInText": "conjugated form in text",
+      "translation": "English translation",
+      "type": "verb",
+      "level": "B1",
+      "sentences": [
+        { "tenseOrCase": "Präsens", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Präteritum", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Perfekt", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Futur I", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Konjunktiv II", "german": "German sentence", "english": "English sentence" }
       ]
-    };
-  }
-}
-
-export async function gradeReadingPassage(passageContent: string, questions: any[], userAnswers: Record<string, string>) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  const prompt = `
-Grade this German reading quiz.
-Passage: "${passageContent.slice(0, 300)}..."
-Questions & Correct Answers: ${JSON.stringify(questions)}
-User Submitted Answers: ${JSON.stringify(userAnswers)}
-
-Return ONLY a valid JSON object with:
-{
-  "scorePercent": 80,
-  "correctCount": 4,
-  "totalCount": 5,
-  "feedback": "Detailed encouraging feedback in German and English",
-  "breakdown": [
-    { "questionId": "q1", "isCorrect": true, "userAnswer": "A", "correctAnswer": "A", "explanation": "..." }
+    }
+  ],
+  "nouns": [
+    {
+      "id": "p_n_1",
+      "word": "Noun singular",
+      "article": "der / die / das",
+      "plural": "die Pluralform",
+      "originalInText": "form as in text",
+      "translation": "English translation",
+      "type": "noun",
+      "level": "B1",
+      "sentences": [
+        { "tenseOrCase": "Nominativ", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Akkusativ", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Dativ", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Genitiv", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Plural Dativ", "german": "German sentence", "english": "English sentence" }
+      ]
+    }
+  ],
+  "adjectives": [
+    {
+      "id": "p_a_1",
+      "word": "Adjective positive",
+      "originalInText": "form as in text",
+      "translation": "English translation",
+      "type": "adjective",
+      "level": "B1",
+      "comparative": "Komparativ",
+      "superlative": "Superlativ",
+      "sentences": [
+        { "tenseOrCase": "Positiv", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Komparativ", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Superlativ", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Prädikativ", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Attributiv", "german": "German sentence", "english": "English sentence" }
+      ]
+    }
+  ],
+  "idioms": [
+    {
+      "id": "p_i_1",
+      "word": "Idiom / Phrase",
+      "originalInText": "as in text",
+      "translation": "English meaning",
+      "type": "idiom",
+      "level": "B2",
+      "sentences": [
+        { "tenseOrCase": "Kontext 1", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Kontext 2", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Kontext 3", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Kontext 4", "german": "German sentence", "english": "English sentence" },
+        { "tenseOrCase": "Kontext 5", "german": "German sentence", "english": "English sentence" }
+      ]
+    }
   ]
 }
 `;
@@ -180,26 +179,82 @@ Return ONLY a valid JSON object with:
     const result = await model.generateContent(prompt);
     const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanText);
-  } catch (err) {
-    let correct = 0;
-    const breakdown = questions.map(q => {
-      const uAns = userAnswers[q.id] || '';
-      const isRight = uAns.toUpperCase().startsWith(q.correctAnswer.toUpperCase());
-      if (isRight) correct++;
-      return {
-        questionId: q.id,
-        isCorrect: isRight,
-        userAnswer: uAns,
-        correctAnswer: q.correctAnswer,
-        explanation: q.explanation
-      };
-    });
+  } catch (err: any) {
+    console.error('extractCardsFromParagraph error:', err);
     return {
-      scorePercent: Math.round((correct / questions.length) * 100),
-      correctCount: correct,
-      totalCount: questions.length,
-      feedback: `Gut gemacht! Du hast ${correct} von ${questions.length} Fragen richtig beantwortet.`,
-      breakdown
+      title: customTitle || 'Deutscher Text Extrakt',
+      verbs: [
+        {
+          id: `p_v_${Date.now()}`,
+          word: 'verstehen',
+          originalInText: 'versteht',
+          translation: 'to understand',
+          type: 'verb',
+          level: 'B1',
+          sentences: [
+            { tenseOrCase: 'Präsens', german: 'Ich verstehe den deutschen Text gut.', english: 'I understand the German text well.' },
+            { tenseOrCase: 'Präteritum', german: 'Er verstand die Grammatik sofort.', english: 'He understood the grammar immediately.' },
+            { tenseOrCase: 'Perfekt', german: 'Wir haben alles genau verstanden.', english: 'We understood everything precisely.' },
+            { tenseOrCase: 'Futur I', german: 'Du wirst die Lektion schnell verstehen.', english: 'You will understand the lesson quickly.' },
+            { tenseOrCase: 'Konjunktiv II', german: 'Wenn du langsamer sprächst, verstände ich dich.', english: 'If you spoke slower, I would understand you.' }
+          ]
+        }
+      ],
+      nouns: [
+        {
+          id: `p_n_${Date.now()}`,
+          word: 'Sprache',
+          article: 'die',
+          plural: 'die Sprachen',
+          originalInText: 'Sprache',
+          translation: 'language',
+          type: 'noun',
+          level: 'A1',
+          sentences: [
+            { tenseOrCase: 'Nominativ', german: 'Die deutsche Sprache ist wunderschön.', english: 'The German language is beautiful.' },
+            { tenseOrCase: 'Akkusativ', german: 'Ich lerne gerne eine neue Sprache.', english: 'I like learning a new language.' },
+            { tenseOrCase: 'Dativ', german: 'In dieser Sprache gibt es viele Regeln.', english: 'In this language there are many rules.' },
+            { tenseOrCase: 'Genitiv', german: 'Die Besonderheit der Sprache ist faszinierend.', english: 'The specialty of the language is fascinating.' },
+            { tenseOrCase: 'Plural Dativ', german: 'Mit vielen Sprachen öffnet sich die Welt.', english: 'With many languages the world opens up.' }
+          ]
+        }
+      ],
+      adjectives: [
+        {
+          id: `p_a_${Date.now()}`,
+          word: 'wichtig',
+          originalInText: 'wichtige',
+          translation: 'important',
+          type: 'adjective',
+          level: 'A2',
+          comparative: 'wichtiger',
+          superlative: 'am wichtigsten',
+          sentences: [
+            { tenseOrCase: 'Positiv', german: 'Das ist eine wichtige Entscheidung.', english: 'That is an important decision.' },
+            { tenseOrCase: 'Komparativ', german: 'Gesundheit ist wichtiger als Geld.', english: 'Health is more important than money.' },
+            { tenseOrCase: 'Superlativ', german: 'Das ist der wichtigste Punkt.', english: 'That is the most important point.' },
+            { tenseOrCase: 'Prädikativ', german: 'Diese Regel ist sehr wichtig.', english: 'This rule is very important.' },
+            { tenseOrCase: 'Attributiv', german: 'Wir besprechen wichtige Themen.', english: 'We discuss important topics.' }
+          ]
+        }
+      ],
+      idioms: [
+        {
+          id: `p_i_${Date.now()}`,
+          word: 'Rolle spielen',
+          originalInText: 'spielt eine Rolle',
+          translation: 'to play a role / matter',
+          type: 'idiom',
+          level: 'B2',
+          sentences: [
+            { tenseOrCase: 'Kontext 1', german: 'Das spielt im Alltag eine große Rolle.', english: 'That plays an important role in everyday life.' },
+            { tenseOrCase: 'Kontext 2', german: 'Geld spielte keine Rolle für ihn.', english: 'Money played no role for him.' },
+            { tenseOrCase: 'Kontext 3', german: 'Er hat eine entscheidende Rolle gespielt.', english: 'He played a decisive role.' },
+            { tenseOrCase: 'Kontext 4', german: 'Motivation wird immer eine Rolle spielen.', english: 'Motivation will always play a role.' },
+            { tenseOrCase: 'Kontext 5', german: 'Ob das wirklich eine Rolle spielt, ist unklar.', english: 'Whether that really matters is unclear.' }
+          ]
+        }
+      ]
     };
   }
 }

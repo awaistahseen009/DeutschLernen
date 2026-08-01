@@ -14,12 +14,13 @@ import {
   X,
   Layers,
   Youtube,
-  LogOut
+  LogOut,
+  FileText
 } from 'lucide-react';
 
 interface LeftSidebarProps {
-  activeTab: 'vocab' | 'reading' | 'exercises' | 'call' | 'favorites' | 'youtube';
-  setActiveTab: (tab: 'vocab' | 'reading' | 'exercises' | 'call' | 'favorites' | 'youtube') => void;
+  activeTab: 'vocab' | 'reading' | 'exercises' | 'call' | 'favorites' | 'youtube' | 'page-to-cards';
+  setActiveTab: (tab: 'vocab' | 'reading' | 'exercises' | 'call' | 'favorites' | 'youtube' | 'page-to-cards') => void;
   selectedLevel: string;
   setSelectedLevel: (level: string) => void;
   germanVoices: SpeechSynthesisVoice[];
@@ -50,6 +51,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
   const navItems = [
     { id: 'vocab', label: 'Wortschatz & Verben', sub: 'Flashcards & Conjugations', icon: BookOpen },
+    { id: 'page-to-cards', label: 'Seite zu Karten', sub: 'Paragraph to Word Folders', icon: FileText },
     { id: 'youtube', label: 'YouTube Extractor', sub: 'Transcripts & Auto-Flashcards', icon: Youtube },
     { id: 'reading', label: 'KI Lesetexte', sub: 'Interactive Passages & Hover', icon: Newspaper },
     { id: 'exercises', label: 'Sprechen, Schreiben & Hören', sub: 'AI Conversations & 15Q Quiz', icon: Mic },
@@ -181,10 +183,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 className="w-full bg-cream-50 border border-cream-300 text-charcoal-900 text-xs rounded-xl p-3 pr-8 focus:ring-2 focus:ring-gold-500 focus:outline-none font-bold shadow-sm cursor-pointer"
               >
                 <option value="">🎙️ Google Deutsch (Standard)</option>
-                <option value="de-DE-Standard-A">🇩🇪 Katja (Natürliche Frauenstimme)</option>
-                <option value="de-DE-Standard-B">🇩🇪 Stefan (Natürliche Männerstimme)</option>
-                <option value="de-DE-Wavenet-A">🇩🇪 Marlene (HQ Neural Voice)</option>
-                <option value="de-DE-Wavenet-B">🇩🇪 Hans (HQ Neural Voice)</option>
+                <option value="de-DE-Journey-F">🌟 Vertex AI Journey (Frauenstimme)</option>
+                <option value="de-DE-Journey-D">🌟 Vertex AI Journey (Männerstimme)</option>
+                <option value="de-DE-Neural2-C">🇩🇪 Google Neural2 Female</option>
+                <option value="de-DE-Neural2-D">🇩🇪 Google Neural2 Male</option>
+                <option value="de-DE-Wavenet-A">🇩🇪 Marlene (Wavenet HQ)</option>
+                <option value="de-DE-Wavenet-B">🇩🇪 Hans (Wavenet HQ)</option>
                 {germanVoices.map((voice) => (
                   <option key={voice.voiceURI} value={voice.voiceURI}>
                     🔊 {voice.name} ({voice.lang})
