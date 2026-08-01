@@ -7,8 +7,9 @@ import jwt from 'jsonwebtoken';
 export const dynamic = 'force-dynamic';
 
 function countExtractedCards(result: any) {
+  if (!result) return 0;
   return ['verbs', 'nouns', 'adjectives', 'idioms'].reduce((total, key) => {
-    return total + (Array.isArray(result?.[key]) ? result[key].length : 0);
+    return total + (Array.isArray(result[key]) ? result[key].length : 0);
   }, 0);
 }
 
@@ -34,12 +35,14 @@ export async function POST(request: Request) {
     // Call Gemini to extract verbs, nouns, adjectives, and idioms
     const result = await extractCardsFromParagraph(rawText, customTitle);
 
-    if (countExtractedCards(result) === 0) {
+    if (!result || countExtractedCards(result) === 0) {
       return NextResponse.json(
         { error: 'Gemini did not return any extractable cards. No project was saved.' },
         { status: 422 }
       );
     }
+
+    const projectTitle = result?.title || customTitle || 'German Extraction';
 
     // Ensure PostgreSQL table exists and save text project
     await initDbSchema();
@@ -47,12 +50,12 @@ export async function POST(request: Request) {
       `INSERT INTO text_projects (user_id, title, raw_text, result_json)
        VALUES ($1, $2, $3, $4)
        RETURNING id, created_at`,
-      [userId, result.title || 'German Extraction', rawText, JSON.stringify(result)]
+      [userId, projectTitle, rawText, JSON.stringify(result)]
     );
 
     return NextResponse.json({
       id: dbRes.rows[0]?.id,
-      title: result.title,
+      title: projectTitle,
       rawText,
       result,
       createdAt: dbRes.rows[0]?.created_at
