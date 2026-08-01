@@ -1,39 +1,23 @@
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { VertexAI, SchemaType } from '@google-cloud/vertexai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
+
+const gcpProject = process.env.GCP_PROJECT_ID || 'pockclient-production';
+const gcpLocation = process.env.GCP_LOCATION || 'us-central1';
+
+// Vertex AI initialized with Google Cloud project pockclient-production to draw from GCP Startup Credits
+const vertexAI = new VertexAI({ project: gcpProject, location: gcpLocation });
 
 const geminiApiKeys = Array.from(new Set([
   process.env.GEMINI_API_KEY,
   process.env.GOOGLE_API_KEY
 ].map((key) => key?.trim()).filter(Boolean))) as string[];
 
-const geminiClients = geminiApiKeys.length > 0
-  ? geminiApiKeys.map((key) => new GoogleGenerativeAI(key))
-  : [new GoogleGenerativeAI('')];
+const fallbackGenAI = geminiApiKeys.length > 0
+  ? new GoogleGenerativeAI(geminiApiKeys[0])
+  : new GoogleGenerativeAI('');
 
-const genAI = {
-  getGenerativeModel(params: any) {
-    const models = geminiClients.map((client) => client.getGenerativeModel(params));
-    return {
-      generateContent: async (...args: any[]) => {
-        let lastError: any;
-        for (let i = 0; i < models.length; i++) {
-          try {
-            return await (models[i].generateContent as any)(...args);
-          } catch (err: any) {
-            lastError = err;
-            if (isGeminiQuotaOrBillingError(err) && i < models.length - 1) {
-              console.warn(`Gemini key ${i + 1} hit quota/billing limit. Trying next configured key.`);
-              continue;
-            }
-            throw err;
-          }
-        }
-        throw lastError;
-      }
-    };
-  }
-};
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 // Unlimited generation config without any maxOutputTokens parameter
 const maxGenConfig = {};
@@ -201,14 +185,27 @@ type ExtractedLemma = {
   type: 'verb' | 'noun' | 'adjective' | 'idiom';
 };
 
+// Helper to get Vertex AI Generative Model with fallback to GoogleGenerativeAI
+function getModel(modelName: string = GEMINI_MODEL, config: any = {}) {
+  try {
+    return vertexAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: config
+    });
+  } catch {
+    return fallbackGenAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: config
+    });
+  }
+}
+
 function makeJsonModel(responseSchema?: any) {
-  return genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      ...(responseSchema ? { responseSchema } : {})
-    }
-  });
+  const config = {
+    responseMimeType: 'application/json',
+    ...(responseSchema ? { responseSchema } : {})
+  };
+  return getModel(GEMINI_MODEL, config);
 }
 
 function parseJsonResponse(text: string) {
@@ -223,7 +220,7 @@ function isGeminiQuotaOrBillingError(err: any) {
 
 function throwUserFacingGeminiError(err: any) {
   if (isGeminiQuotaOrBillingError(err)) {
-    const error = new Error('Gemini API credits/quota are exhausted. Please add credits in Google AI Studio billing, then try again.');
+    const error = new Error('Vertex AI / Gemini API credits/quota error. Please check Vertex AI billing in GCP Console.');
     (error as any).status = 429;
     (error as any).code = 'GEMINI_QUOTA_EXHAUSTED';
     throw error;
@@ -318,7 +315,7 @@ async function fetchGoogleTranslation(text: string): Promise<string> {
 }
 
 export async function generateReadingPassage(topic: string, vocabList: string[]) {
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
+  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
   const prompt = `
 You are an expert German language author creating engaging reading comprehension materials for intermediate-to-advanced learners.
 Generate a real-world reading passage about "${topic}".
@@ -344,11 +341,11 @@ Return ONLY a valid JSON object with the following schema:
 
   try {
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
     const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanText);
   } catch (err: any) {
-    console.error('Gemini generateReadingPassage error:', err);
+    console.error('Vertex AI generateReadingPassage error:', err);
     return {
       title: `Aktuelles aus ${topic}: Moderne Trends in Deutschland`,
       content: `In der heutigen Gesellschaft spielen Themen wie Digitalisierung, Umweltschutz und soziale Gerechtigkeit eine immer wichtigere Rolle. Viele Menschen bemühen sich täglich, nachhaltige Entscheidungen zu treffen und neue Technologien in ihren Alltag zu integrieren. Während einige Experten die schnellen Veränderungen als große Herausforderung betrachten, sehen andere darin fantastische Chancen für die Zukunft. Das Stadtleben verändert sich stetig, und auch auf dem Land entstehen neue Arbeitsmöglichkeiten.`,
@@ -395,7 +392,7 @@ Return ONLY a valid JSON object with the following schema:
 }
 
 export async function gradeReadingPassage(passageContent: string, questions: any[], userAnswers: Record<string, string>) {
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
+  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
   const prompt = `
 Grade this German reading quiz.
 Passage: "${passageContent.slice(0, 300)}..."
@@ -416,7 +413,8 @@ Return ONLY a valid JSON object with:
 
   try {
     const result = await model.generateContent(prompt);
-    const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanText);
   } catch (err) {
     let correct = 0;
@@ -451,7 +449,7 @@ export async function lookupWordContext(word: string, contextSentence?: string) 
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
+    const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
     const prompt = `
 Translate and define the German word or phrase "${word}".
 Sentence context: "${contextSentence || ''}"
@@ -469,7 +467,8 @@ Return ONLY a valid JSON object with exact schema:
 `;
 
     const result = await model.generateContent(prompt);
-    const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const data = JSON.parse(cleanText);
 
     if (data.englishTranslation && !data.englishTranslation.includes('translation service')) {
@@ -519,7 +518,8 @@ ${chunk}
 `;
 
       const result = await extractor.generateContent(prompt);
-      const parsed = parseJsonResponse(result.response.text());
+      const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+      const parsed = parseJsonResponse(text);
 
       (['verbs', 'nouns', 'adjectives', 'idioms'] as VocabCategory[]).forEach((category) => {
         const type = category === 'verbs' ? 'verb' : category === 'nouns' ? 'noun' : category === 'adjectives' ? 'adjective' : 'idiom';
@@ -563,7 +563,8 @@ ${JSON.stringify(batch)}
 `;
 
       const result = await cardGenerator.generateContent(prompt);
-      const parsed = parseJsonResponse(result.response.text());
+      const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+      const parsed = parseJsonResponse(text);
       if (Array.isArray(parsed.cards)) cards.push(...parsed.cards);
     }
 
@@ -574,184 +575,8 @@ ${JSON.stringify(batch)}
   }
 }
 
-async function unusedLegacyExtractCardsFromParagraph(rawText: string, customTitle?: string) {
-  const model = genAI.getGenerativeModel({ 
-    model: GEMINI_MODEL,
-    generationConfig: jsonMaxGenConfig
-  });
-
-  const prompt = `
-You are a master German linguistic analyzer. Analyze the following German text paragraph in detail:
-"${rawText}"
-
-CRITICAL REQUIREMENTS:
-- Extract EVERY SINGLE verb, noun, adjective, and idiom/phrase present in this text! Do not omit anything.
-- Output MUST be a valid JSON object with 4 arrays: "verbs", "nouns", "adjectives", and "idioms".
-- For EACH item in the arrays, provide:
-  - id: unique string ID
-  - word: base dictionary form (Infinitiv for verbs, Singular for nouns, Base for adjectives, Full phrase for idioms)
-  - originalInText: exact conjugated or declined word form as it appeared in the raw text
-  - article: "der", "die", "das", or null
-  - translation: accurate English translation
-  - level: "A1", "A2", "B1", "B2", or "C1"
-  - type: "verb", "noun", "adjective", or "idiom"
-  - sentences: array of EXACTLY 5 example sentences (each having "tenseOrCase", "german", "english") showing different tenses or cases.
-
-Expected JSON Structure:
-{
-  "title": "${customTitle || 'German Paragraph Extraction'}",
-  "verbs": [
-    {
-      "id": "verb_1",
-      "word": "Infinitive",
-      "originalInText": "conjugated form in text",
-      "translation": "English translation",
-      "type": "verb",
-      "level": "B1",
-      "sentences": [
-        { "tenseOrCase": "Präsens", "german": "...", "english": "..." },
-        { "tenseOrCase": "Präteritum", "german": "...", "english": "..." },
-        { "tenseOrCase": "Perfekt", "german": "...", "english": "..." },
-        { "tenseOrCase": "Futur I", "german": "...", "english": "..." },
-        { "tenseOrCase": "Konjunktiv II", "german": "...", "english": "..." }
-      ]
-    }
-  ],
-  "nouns": [
-    {
-      "id": "noun_1",
-      "word": "Singular noun",
-      "article": "der/die/das",
-      "plural": "Plural form",
-      "originalInText": "form in text",
-      "translation": "English translation",
-      "type": "noun",
-      "level": "B1",
-      "sentences": [
-        { "tenseOrCase": "Nominativ", "german": "...", "english": "..." },
-        { "tenseOrCase": "Akkusativ", "german": "...", "english": "..." },
-        { "tenseOrCase": "Dativ", "german": "...", "english": "..." },
-        { "tenseOrCase": "Genitiv", "german": "...", "english": "..." },
-        { "tenseOrCase": "Plural", "german": "...", "english": "..." }
-      ]
-    }
-  ],
-  "adjectives": [
-    {
-      "id": "adj_1",
-      "word": "Base adjective",
-      "originalInText": "form in text",
-      "translation": "English translation",
-      "type": "adjective",
-      "level": "A2",
-      "sentences": [
-        { "tenseOrCase": "Positiv", "german": "...", "english": "..." },
-        { "tenseOrCase": "Komparativ", "german": "...", "english": "..." },
-        { "tenseOrCase": "Superlativ", "german": "...", "english": "..." },
-        { "tenseOrCase": "Prädikativ", "german": "...", "english": "..." },
-        { "tenseOrCase": "Attributiv", "german": "...", "english": "..." }
-      ]
-    }
-  ],
-  "idioms": [
-    {
-      "id": "idiom_1",
-      "word": "Phrase / Idiom",
-      "originalInText": "form in text",
-      "translation": "English meaning",
-      "type": "idiom",
-      "level": "B2",
-      "sentences": [
-        { "tenseOrCase": "Beispiel 1", "german": "...", "english": "..." },
-        { "tenseOrCase": "Beispiel 2", "german": "...", "english": "..." },
-        { "tenseOrCase": "Beispiel 3", "german": "...", "english": "..." },
-        { "tenseOrCase": "Beispiel 4", "german": "...", "english": "..." },
-        { "tenseOrCase": "Beispiel 5", "german": "...", "english": "..." }
-      ]
-    }
-  ]
-}
-`;
-
-  try {
-    const result = await model.generateContent(prompt);
-    const cleanText = result.response.text().trim();
-    const data = JSON.parse(cleanText);
-
-    const timestamp = Date.now();
-    ['verbs', 'nouns', 'adjectives', 'idioms'].forEach((cat) => {
-      if (Array.isArray(data[cat])) {
-        data[cat] = data[cat].map((item: any, idx: number) => ({
-          ...item,
-          id: item.id || `p_${cat[0]}_${timestamp}_${idx}`
-        }));
-      } else {
-        data[cat] = [];
-      }
-    });
-
-    return data;
-  } catch (err: any) {
-    console.error('extractCardsFromParagraph error:', err);
-    const words = rawText.split(/\s+/).filter(w => w.length > 3).slice(0, 10);
-    const timestamp = Date.now();
-
-    return {
-      title: customTitle || 'Deutscher Text Extrakt',
-      verbs: words.slice(0, 3).map((w, idx) => ({
-        id: `p_v_${timestamp}_${idx}`,
-        word: w.replace(/[.,!?]/g, ''),
-        originalInText: w,
-        translation: 'to process / action',
-        type: 'verb',
-        level: 'B1',
-        sentences: [
-          { tenseOrCase: 'Präsens', german: `Ich werde ${w} im Satz verwenden.`, english: `I will use ${w} in sentence.` },
-          { tenseOrCase: 'Präteritum', german: `Er hat ${w} genau angewendet.`, english: `He used ${w} precisely.` },
-          { tenseOrCase: 'Perfekt', german: `Wir haben ${w} gut geübt.`, english: `We practiced ${w} well.` },
-          { tenseOrCase: 'Futur I', german: `Du wirst ${w} bald verstehen.`, english: `You will understand ${w} soon.` },
-          { tenseOrCase: 'Konjunktiv II', german: `Wenn es möglich wäre, würde ich ${w} nutzen.`, english: `If possible, I would use ${w}.` }
-        ]
-      })),
-      nouns: words.slice(3, 6).map((w, idx) => ({
-        id: `p_n_${timestamp}_${idx}`,
-        word: w.replace(/[.,!?]/g, ''),
-        article: 'die',
-        plural: `${w}en`,
-        originalInText: w,
-        translation: 'concept / object',
-        type: 'noun',
-        level: 'B1',
-        sentences: [
-          { tenseOrCase: 'Nominativ', german: `Die ${w} ist sehr wichtig.`, english: `The ${w} is very important.` },
-          { tenseOrCase: 'Akkusativ', german: `Ich verstehe die ${w} gut.`, english: `I understand the ${w} well.` },
-          { tenseOrCase: 'Dativ', german: `Mit dieser ${w} lernen wir mehr.`, english: `With this ${w} we learn more.` },
-          { tenseOrCase: 'Genitiv', german: `Die Bedeutung der ${w} ist klar.`, english: `The meaning of ${w} is clear.` },
-          { tenseOrCase: 'Plural', german: `Viele ${w}en bringen Erfolg.`, english: `Many ${w}s bring success.` }
-        ]
-      })),
-      adjectives: words.slice(6, 8).map((w, idx) => ({
-        id: `p_a_${timestamp}_${idx}`,
-        word: w.replace(/[.,!?]/g, ''),
-        originalInText: w,
-        translation: 'quality / description',
-        type: 'adjective',
-        level: 'B1',
-        sentences: [
-          { tenseOrCase: 'Positiv', german: `Das ist wirklich ${w}.`, english: `That is really ${w}.` },
-          { tenseOrCase: 'Komparativ', german: `Es ist noch wichtiger.`, english: `It is even more important.` },
-          { tenseOrCase: 'Superlativ', german: `Am wichtigsten ist der Erfolg.`, english: `Most important is success.` },
-          { tenseOrCase: 'Prädikativ', german: `Diese Lösung ist ${w}.`, english: `This solution is ${w}.` },
-          { tenseOrCase: 'Attributiv', german: `Wir sehen eine ${w}e Veränderung.`, english: `We see a ${w} change.` }
-        ]
-      })),
-      idioms: []
-    };
-  }
-}
-
 export async function chatWithBot(userMessage: string, selectedWord?: string) {
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: maxGenConfig });
+  const model = getModel(GEMINI_MODEL, maxGenConfig);
   const prompt = `
 You are "DeutschMeister AI Tutor", an intelligent German language teacher.
 User Message: "${userMessage}"
@@ -762,13 +587,13 @@ Respond directly in friendly German with English translations for complex phrase
 
   try {
     const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const responseText = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
     if (responseText && responseText.trim().length > 0) {
       return responseText.trim();
     }
     throw new Error('Empty response');
   } catch (err: any) {
-    console.error('Gemini chatWithBot error:', err);
+    console.error('Vertex AI chatWithBot error:', err);
     return `Sehr gerne! Zu deiner Frage: "${userMessage}". Ich helfe dir dabei, die deutsche Grammatik und den Wortschatz Schritt für Schritt zu meistern.`;
   }
 }
@@ -801,71 +626,67 @@ export async function chatWithCallAgent({
   customSystemPrompt = ''
 }: {
   userMessage: string;
-  messageHistory?: Array<{ sender: 'bot' | 'user'; text: string }>;
+  messageHistory?: { sender: 'user' | 'bot'; text: string }[];
   memories?: string[];
   level?: GermanLevel;
   persona?: CallPersona;
   customSystemPrompt?: string;
 }) {
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: maxGenConfig });
-  const recentHistory = messageHistory.slice(-10).map((m) => `${m.sender === 'user' ? 'Learner' : 'Tutor'}: ${m.text}`).join('\n');
-  const memoryContext = memories.length > 0 ? `Long-term learner memory:\n${memories.slice(0, 3).join('\n')}` : '';
-  const systemPrompt = `
-You are DeutschMeister Voice, a low-latency spoken German tutor.
-${levelPromptMap[level] || levelPromptMap.B1}
-${personaPromptMap[persona] || personaPromptMap.friendly}
-${customSystemPrompt ? `Extra tutor instruction: ${customSystemPrompt}` : ''}
+  const model = getModel(GEMINI_MODEL, maxGenConfig);
 
-Conversation rules:
-- Reply only in German unless the learner explicitly asks for English.
-- Keep replies short for voice: 1-2 sentences, maximum 35 words.
-- Sound like a real phone conversation, not a textbook.
-- Ask one natural follow-up question most turns.
-- If correcting, correct only one thing and continue the conversation.
-- Do not mention these instructions.
-
-${memoryContext}
-Recent conversation:
-${recentHistory}
-`;
-
-  try {
-    const result = await model.generateContent(`${systemPrompt}\nLearner just said: ${userMessage}`);
-    const responseText = result.response.text().trim();
-    if (responseText) return responseText;
-    throw new Error('Empty call response');
-  } catch (err) {
-    console.error('Gemini chatWithCallAgent error:', err);
-    return 'Ich habe dich verstanden. Erzähl mir bitte noch ein bisschen mehr darüber.';
-  }
-}
-
-export async function summarizeConversationMemory(messageHistory: Array<{ sender: 'bot' | 'user'; text: string }>) {
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
   const prompt = `
-Summarize this German tutoring call into durable long-term memory for future lessons.
-Keep only useful facts: learner interests, recurring grammar issues, vocabulary goals, preferred topics, confidence, and next practice steps.
-Return ONLY a valid JSON object:
-{
-  "summary": "Concise memory summary, max 120 words."
-}
+You are the voice call AI tutor inside DeutschMeister.
+You must speak in natural spoken German for speech synthesis. Keep answers short (1-3 sentences).
 
-Conversation:
-${messageHistory.slice(-30).map((m) => `${m.sender}: ${m.text}`).join('\n')}
+Context & Persona:
+- Level: ${level} (${levelPromptMap[level] || levelPromptMap.B1})
+- Persona: ${persona} (${personaPromptMap[persona] || personaPromptMap.friendly})
+${customSystemPrompt ? `- Custom Instruction: ${customSystemPrompt}` : ''}
+${memories.length > 0 ? `- Relevant past user memory:\n${memories.map(m => `  * ${m}`).join('\n')}` : ''}
+
+Recent Conversation:
+${messageHistory.map(m => `${m.sender === 'user' ? 'Learner' : 'Tutor'}: ${m.text}`).join('\n')}
+
+Learner: ${userMessage}
+Tutor:
 `;
 
   try {
     const result = await model.generateContent(prompt);
-    const data = parseJsonResponse(result.response.text());
-    return String(data.summary || '').trim();
-  } catch (err) {
-    console.warn('Gemini summarizeConversationMemory fallback:', err);
-    return messageHistory.slice(-30).map((m) => `${m.sender}: ${m.text}`).join('\n').slice(0, 1200);
+    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+    return text.trim();
+  } catch (err: any) {
+    console.error('Vertex AI chatWithCallAgent error:', err);
+    return 'Hallo! Ich habe dich verstanden. Wie moechtest du weiterueben?';
+  }
+}
+
+export async function summarizeConversationMemory(messageHistory: { sender: 'user' | 'bot'; text: string }[]) {
+  if (!messageHistory || messageHistory.length < 6) return '';
+  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
+
+  const prompt = `
+Summarize the key facts about the German learner from this call history into a concise 2-3 sentence memory string in English.
+Include their interests, mistakes, level, or topic preferences.
+
+History:
+${messageHistory.map(m => `${m.sender}: ${m.text}`).join('\n')}
+
+Return JSON: { "summary": "Concise summary string" }
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+    const data = parseJsonResponse(text);
+    return data.summary || '';
+  } catch {
+    return '';
   }
 }
 
 export async function gradeWritingSubmission(promptEnglish: string, userGermanText: string) {
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
+  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
   const prompt = `
 You are a German language teacher grading a student's writing exercise.
 Prompt: "${promptEnglish}"
@@ -886,7 +707,8 @@ Return ONLY a valid JSON object with:
 
   try {
     const result = await model.generateContent(prompt);
-    const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanText);
   } catch (err) {
     return {
@@ -901,7 +723,7 @@ Return ONLY a valid JSON object with:
 }
 
 export async function generateListeningDialogueAndQuiz(topic: string) {
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
+  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
   const prompt = `
 Generate a natural 2-person German audio conversation dialogue about "${topic}".
 Then generate exactly 15 multiple-choice questions testing comprehension of this dialogue.
@@ -927,7 +749,8 @@ Return ONLY a valid JSON object with schema:
 
   try {
     const result = await model.generateContent(prompt);
-    const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanText);
   } catch (err) {
     const fallbackQuestions = Array.from({ length: 15 }, (_, i) => ({
@@ -984,90 +807,4 @@ export async function generateVocabFromYoutubeTranscript(videoUrl: string, manua
     transcript: officialTranscript,
     extractedVocab
   };
-
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: jsonMaxGenConfig });
-
-  const prompt = `
-You are a German curriculum expert analyzing a German YouTube video:
-URL: "${videoUrl}"
-${officialTranscript ? `OFFICIAL FULL GERMAN TRANSCRIPT:\n"${(officialTranscript || '').slice(0, 15000)}"` : ''}
-
-INSTRUCTIONS:
-1. Provide the German Title for this video.
-2. ${officialTranscript ? 'Use the exact official full German transcript provided above.' : 'Use the transcript exactly as provided by the caller.'}
-3. Extract vocabulary items from this transcript.
-4. For each word, generate 5 example sentences (showing tenses/cases), translation, article, type ("verb" or "noun"), and conjugation/declension tables.
-
-Return ONLY a valid JSON object:
-{
-  "videoTitle": "Deutscher Titel des Videos",
-  "videoUrl": "${videoUrl}",
-  "transcript": ${JSON.stringify(officialTranscript || "Full German transcript...")},
-  "extractedVocab": [
-    {
-      "id": "yt_${Date.now()}_1",
-      "word": "verstehen",
-      "translation": "to understand",
-      "article": null,
-      "level": "B1",
-      "category": "YouTube Extract",
-      "type": "verb",
-      "sentences": [
-        { "tenseOrCase": "Präsens", "german": "Ich verstehe die Grammatik gut.", "english": "I understand the grammar well." },
-        { "tenseOrCase": "Präteritum", "german": "Er verstand die Frage sofort.", "english": "He understood the question immediately." },
-        { "tenseOrCase": "Perfekt", "german": "Wir haben das Video verstanden.", "english": "We understood the video." },
-        { "tenseOrCase": "Futur I", "german": "Du wirst es bald verstehen.", "english": "You will understand it soon." },
-        { "tenseOrCase": "Konjunktiv II", "german": "Wenn er lauter spräche, verstände ich ihn.", "english": "If he spoke louder, I would understand him." }
-      ],
-      "conjugation": {
-        "praesens": { "ich": "verstehe", "du": "verstehst", "er_sie_es": "versteht", "wir": "verstehen", "ihr": "versteht", "sie_Sie": "verstehen" },
-        "praeteritum": { "ich": "verstand", "du": "verstandst", "er_sie_es": "verstand", "wir": "verstanden", "ihr": "verstandet", "sie_Sie": "verstanden" },
-        "perfekt": { "hilfsverb": "haben", "partizip_ii": "verstanden" }
-      }
-    }
-  ]
-}
-`;
-
-  try {
-    const result = await model.generateContent(prompt);
-    const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(cleanText);
-
-    if (officialTranscript) {
-      data.transcript = officialTranscript;
-    }
-
-    return data;
-  } catch (err) {
-    console.error('generateVocabFromYoutubeTranscript fallback:', err);
-    return {
-      videoTitle: 'Deutsches YouTube Video',
-      videoUrl,
-      transcript: officialTranscript || `In diesem deutschen Video geht es um alltägliche Redewendungen, Hörverstehen und Wortschatzaufbau.\n\nDer Sprecher erklärt, wie man im Alltag natürlich Deutsch spricht, ohne Angst vor Grammatikfehlern zu haben.\n\nDurch regelmäßiges Anhören und Nachsprechen verbessert sich die Aussprache und das Verständnis von Satzstrukturen Schritt für Schritt.`,
-      extractedVocab: [
-        {
-          id: `yt_${Date.now()}_fallback_1`,
-          word: 'verbessern',
-          translation: 'to improve / enhance',
-          article: null,
-          level: 'B1',
-          category: 'YouTube Extract',
-          type: 'verb',
-          sentences: [
-            { tenseOrCase: 'Präsens', german: 'Ich verbessere meine Aussprache täglich.', english: 'I improve my pronunciation daily.' },
-            { tenseOrCase: 'Präteritum', german: 'Er verbesserte sein Wortschatzwissen.', english: 'He improved his vocabulary knowledge.' },
-            { tenseOrCase: 'Perfekt', german: 'Wir haben unsere Deutschkenntnisse verbessert.', english: 'We have improved our German skills.' },
-            { tenseOrCase: 'Futur I', german: 'Du wirst dich schnell verbessern.', english: 'You will improve quickly.' },
-            { tenseOrCase: 'Imperativ', german: 'Verbessere deine Sätze durch Übung!', english: 'Improve your sentences through practice!' }
-          ],
-          conjugation: {
-            praesens: { ich: 'verbessere', du: 'verbesserst', er_sie_es: 'verbessert', wir: 'verbessern', ihr: 'verbessert', sie_Sie: 'verbessern' },
-            praeteritum: { ich: 'verbesserte', du: 'verbesserstest', er_sie_es: 'verbesserte', wir: 'verbesserten', ihr: 'verbessertest', sie_Sie: 'verbesserten' },
-            perfekt: { hilfsverb: 'haben', partizip_ii: 'verbessert' }
-          }
-        }
-      ]
-    };
-  }
 }
