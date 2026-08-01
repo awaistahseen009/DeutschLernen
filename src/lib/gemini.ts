@@ -101,6 +101,54 @@ Return ONLY a valid JSON object with the following schema:
   }
 }
 
+export async function gradeReadingPassage(passageContent: string, questions: any[], userAnswers: Record<string, string>) {
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const prompt = `
+Grade this German reading quiz.
+Passage: "${passageContent.slice(0, 300)}..."
+Questions & Correct Answers: ${JSON.stringify(questions)}
+User Submitted Answers: ${JSON.stringify(userAnswers)}
+
+Return ONLY a valid JSON object with:
+{
+  "scorePercent": 80,
+  "correctCount": 4,
+  "totalCount": 5,
+  "feedback": "Detailed encouraging feedback in German and English",
+  "breakdown": [
+    { "questionId": "q1", "isCorrect": true, "userAnswer": "A", "correctAnswer": "A", "explanation": "..." }
+  ]
+}
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanText);
+  } catch (err) {
+    let correct = 0;
+    const breakdown = questions.map(q => {
+      const uAns = userAnswers[q.id] || '';
+      const isRight = uAns.toUpperCase().startsWith(q.correctAnswer.toUpperCase());
+      if (isRight) correct++;
+      return {
+        questionId: q.id,
+        isCorrect: isRight,
+        userAnswer: uAns,
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation
+      };
+    });
+    return {
+      scorePercent: Math.round((correct / questions.length) * 100),
+      correctCount: correct,
+      totalCount: questions.length,
+      feedback: `Gut gemacht! Du hast ${correct} von ${questions.length} Fragen richtig beantwortet.`,
+      breakdown
+    };
+  }
+}
+
 export async function lookupWordContext(word: string, contextSentence?: string) {
   const cleanWord = word.trim().toLowerCase();
   const cacheKey = `${cleanWord}_${contextSentence?.slice(0, 30) || 'default'}`;
