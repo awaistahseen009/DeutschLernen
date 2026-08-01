@@ -1,8 +1,18 @@
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
 
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
+
+// Max generation config with no artificial limits (8192 max tokens output)
+const maxGenConfig = {
+  maxOutputTokens: 8192
+};
+
+const jsonMaxGenConfig = {
+  responseMimeType: 'application/json',
+  maxOutputTokens: 8192
+};
 
 // Server-side in-memory dictionary lookup cache
 const dictCache = new Map<string, any>();
@@ -25,7 +35,7 @@ async function fetchGoogleTranslation(text: string): Promise<string> {
 }
 
 export async function generateReadingPassage(topic: string, vocabList: string[]) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
   const prompt = `
 You are an expert German language author creating engaging reading comprehension materials for intermediate-to-advanced learners.
 Generate a real-world reading passage about "${topic}".
@@ -102,7 +112,7 @@ Return ONLY a valid JSON object with the following schema:
 }
 
 export async function gradeReadingPassage(passageContent: string, questions: any[], userAnswers: Record<string, string>) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
   const prompt = `
 Grade this German reading quiz.
 Passage: "${passageContent.slice(0, 300)}..."
@@ -153,13 +163,12 @@ export async function lookupWordContext(word: string, contextSentence?: string) 
   const cleanWord = word.trim().toLowerCase();
   const cacheKey = `${cleanWord}_${contextSentence?.slice(0, 30) || 'default'}`;
 
-  // Check in-memory server cache for instant 0ms response
   if (dictCache.has(cacheKey)) {
     return dictCache.get(cacheKey);
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
     const prompt = `
 Translate and define the German word or phrase "${word}".
 Sentence context: "${contextSentence || ''}"
@@ -186,7 +195,6 @@ Return ONLY a valid JSON object with exact schema:
     }
     throw new Error('Fallback to Google Translate');
   } catch (err) {
-    // 100% Reliable Fallback: Direct Google Translation for exact English meaning
     const exactEnglish = await fetchGoogleTranslation(word);
 
     const fallbackObj = {
@@ -205,13 +213,9 @@ Return ONLY a valid JSON object with exact schema:
 }
 
 export async function extractCardsFromParagraph(rawText: string, customTitle?: string) {
-  // Use Gemini Structured Output JSON mode with maxOutputTokens 8192 for large text processing
   const model = genAI.getGenerativeModel({ 
     model: 'gemini-1.5-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      maxOutputTokens: 8192
-    }
+    generationConfig: jsonMaxGenConfig
   });
 
   const prompt = `
@@ -312,7 +316,6 @@ Expected JSON Structure:
     const cleanText = result.response.text().trim();
     const data = JSON.parse(cleanText);
 
-    // Ensure IDs are unique for each item
     const timestamp = Date.now();
     ['verbs', 'nouns', 'adjectives', 'idioms'].forEach((cat) => {
       if (Array.isArray(data[cat])) {
@@ -328,7 +331,6 @@ Expected JSON Structure:
     return data;
   } catch (err: any) {
     console.error('extractCardsFromParagraph error:', err);
-    // Dynamic Fallback parsing words if JSON fails
     const words = rawText.split(/\s+/).filter(w => w.length > 3).slice(0, 10);
     const timestamp = Date.now();
 
@@ -387,7 +389,7 @@ Expected JSON Structure:
 }
 
 export async function chatWithBot(userMessage: string, selectedWord?: string) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: maxGenConfig });
   const prompt = `
 You are "DeutschMeister AI Tutor", an intelligent German language teacher.
 User Message: "${userMessage}"
@@ -410,7 +412,7 @@ Respond directly in friendly German with English translations for complex phrase
 }
 
 export async function gradeWritingSubmission(promptEnglish: string, userGermanText: string) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
   const prompt = `
 You are a German language teacher grading a student's writing exercise.
 Prompt: "${promptEnglish}"
@@ -446,7 +448,7 @@ Return ONLY a valid JSON object with:
 }
 
 export async function generateListeningDialogueAndQuiz(topic: string) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
   const prompt = `
 Generate a natural 2-person German audio conversation dialogue about "${topic}".
 Then generate exactly 15 multiple-choice questions testing comprehension of this dialogue.
@@ -502,7 +504,7 @@ Return ONLY a valid JSON object with schema:
 export async function generateVocabFromYoutubeTranscript(videoUrl: string, manualTranscript?: string) {
   let officialTranscript = manualTranscript?.trim() || await fetchFullYoutubeTranscript(videoUrl);
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: jsonMaxGenConfig });
 
   const prompt = `
 You are a German curriculum expert analyzing a German YouTube video:
