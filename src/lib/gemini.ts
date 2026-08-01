@@ -1,231 +1,138 @@
-import { VertexAI, SchemaType } from '@google-cloud/vertexai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
 
-const gcpProject = process.env.GCP_PROJECT_ID || 'pockclient-production';
-const gcpLocation = process.env.GCP_LOCATION || 'us-central1';
+type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
 
-// Vertex AI initialized with Google Cloud project pockclient-production to draw from GCP Startup Credits
-const vertexAI = new VertexAI({ project: gcpProject, location: gcpLocation });
-
-const geminiApiKeys = Array.from(new Set([
-  process.env.GEMINI_API_KEY,
-  process.env.GOOGLE_API_KEY
-].map((key) => key?.trim()).filter(Boolean))) as string[];
-
-const fallbackGenAI = geminiApiKeys.length > 0
-  ? new GoogleGenerativeAI(geminiApiKeys[0])
-  : new GoogleGenerativeAI('');
-
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-
-// Unlimited generation config without any maxOutputTokens parameter
-const maxGenConfig = {};
-
-const jsonMaxGenConfig = {
-  responseMimeType: 'application/json'
+type GeminiContent = {
+  role?: 'user' | 'model';
+  parts: GeminiPart[];
 };
 
-const sentenceSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    tenseOrCase: { type: SchemaType.STRING },
-    german: { type: SchemaType.STRING },
-    english: { type: SchemaType.STRING }
-  },
-  required: ['tenseOrCase', 'german', 'english']
-};
+function projectId() {
+  return process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || 'pockclient-production';
+}
 
-const vocabCardSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    id: { type: SchemaType.STRING },
-    word: { type: SchemaType.STRING },
-    originalInText: { type: SchemaType.STRING },
-    article: { type: SchemaType.STRING, nullable: true },
-    plural: { type: SchemaType.STRING, nullable: true },
-    translation: { type: SchemaType.STRING },
-    level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },
-    type: { type: SchemaType.STRING, enum: ['verb', 'noun', 'adjective', 'idiom'] },
-    sentences: {
-      type: SchemaType.ARRAY,
-      items: sentenceSchema
-    },
-    conjugation: {
-      type: SchemaType.OBJECT,
-      nullable: true,
-      properties: {
-        praesens: {
-          type: SchemaType.OBJECT,
-          properties: {
-            ich: { type: SchemaType.STRING },
-            du: { type: SchemaType.STRING },
-            er_sie_es: { type: SchemaType.STRING },
-            wir: { type: SchemaType.STRING },
-            ihr: { type: SchemaType.STRING },
-            sie_Sie: { type: SchemaType.STRING }
-          }
-        },
-        praeteritum: {
-          type: SchemaType.OBJECT,
-          properties: {
-            ich: { type: SchemaType.STRING },
-            du: { type: SchemaType.STRING },
-            er_sie_es: { type: SchemaType.STRING },
-            wir: { type: SchemaType.STRING },
-            ihr: { type: SchemaType.STRING },
-            sie_Sie: { type: SchemaType.STRING }
-          }
-        },
-        perfekt: {
-          type: SchemaType.OBJECT,
-          properties: {
-            hilfsverb: { type: SchemaType.STRING, enum: ['haben', 'sein'] },
-            partizip_ii: { type: SchemaType.STRING }
-          }
-        }
-      }
-    },
-    declension: {
-      type: SchemaType.OBJECT,
-      nullable: true,
-      properties: {
-        nominativ: { type: SchemaType.STRING },
-        akkusativ: { type: SchemaType.STRING },
-        dativ: { type: SchemaType.STRING },
-        genitiv: { type: SchemaType.STRING },
-        plural: { type: SchemaType.STRING }
-      }
-    }
-  },
-  required: ['word', 'originalInText', 'translation', 'level', 'type', 'sentences']
-};
+function location() {
+  return process.env.VERTEX_AI_LOCATION || process.env.GCP_LOCATION || 'us-central1';
+}
 
-const extractionListSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    verbs: {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          lemma: { type: SchemaType.STRING },
-          originalInText: { type: SchemaType.STRING },
-          translation: { type: SchemaType.STRING },
-          level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] }
-        },
-        required: ['lemma', 'originalInText', 'translation', 'level']
-      }
-    },
-    nouns: {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          lemma: { type: SchemaType.STRING },
-          originalInText: { type: SchemaType.STRING },
-          article: { type: SchemaType.STRING, enum: ['der', 'die', 'das'] },
-          plural: { type: SchemaType.STRING },
-          translation: { type: SchemaType.STRING },
-          level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] }
-        },
-        required: ['lemma', 'originalInText', 'article', 'plural', 'translation', 'level']
-      }
-    },
-    adjectives: {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          lemma: { type: SchemaType.STRING },
-          originalInText: { type: SchemaType.STRING },
-          translation: { type: SchemaType.STRING },
-          level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] }
-        },
-        required: ['lemma', 'originalInText', 'translation', 'level']
-      }
-    },
-    idioms: {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          lemma: { type: SchemaType.STRING },
-          originalInText: { type: SchemaType.STRING },
-          translation: { type: SchemaType.STRING },
-          level: { type: SchemaType.STRING, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] }
-        },
-        required: ['lemma', 'originalInText', 'translation', 'level']
-      }
-    }
-  },
-  required: ['verbs', 'nouns', 'adjectives', 'idioms']
-};
+function vertexHost() {
+  const region = location();
+  return region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`;
+}
 
-const cardBatchSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    cards: {
-      type: SchemaType.ARRAY,
-      items: vocabCardSchema
-    }
-  },
-  required: ['cards']
-};
+export const VERTEX_GEMINI_MODEL = process.env.VERTEX_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+export const VERTEX_GEMINI_FAST_MODEL = process.env.VERTEX_GEMINI_FAST_MODEL || 'gemini-2.5-flash-lite';
 
-type VocabCategory = 'verbs' | 'nouns' | 'adjectives' | 'idioms';
+async function accessToken() {
+  const configured = process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
+  if (configured) return configured;
 
-type ExtractedLemma = {
-  lemma: string;
-  originalInText: string;
-  article?: string | null;
-  plural?: string | null;
-  translation: string;
-  level: string;
-  type: 'verb' | 'noun' | 'adjective' | 'idiom';
-};
-
-// Helper to get Vertex AI Generative Model with fallback to GoogleGenerativeAI
-function getModel(modelName: string = GEMINI_MODEL, config: any = {}) {
   try {
-    return vertexAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: config
-    });
-  } catch {
-    return fallbackGenAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      generationConfig: config
-    });
-  }
+    const res = await fetch(
+      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+      { headers: { 'Metadata-Flavor': 'Google' } }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { access_token?: string };
+      if (data.access_token) return data.access_token;
+    }
+  } catch {}
+
+  return null;
 }
 
-function makeJsonModel(responseSchema?: any) {
-  const config = {
-    responseMimeType: 'application/json',
-    ...(responseSchema ? { responseSchema } : {})
+function vertexGenerateContentEndpoint(project: string, model: string, apiKey?: string) {
+  const region = location();
+  const base = `https://${vertexHost()}/v1/projects/${project}/locations/${region}/publishers/google/models/${model}:generateContent`;
+  if (apiKey) {
+    return `${base}?key=${apiKey}`;
+  }
+  return base;
+}
+
+function extractJson(raw: string) {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{')) return trimmed;
+  const match = trimmed.match(/\{[\s\S]*\}/);
+  return match?.[0] || '{}';
+}
+
+async function callVertexApi({
+  model = VERTEX_GEMINI_MODEL,
+  system,
+  prompt,
+  parts = [],
+  temperature = 0.2,
+  responseMimeType
+}: {
+  model?: string;
+  system?: string;
+  prompt: string;
+  parts?: GeminiPart[];
+  temperature?: number;
+  responseMimeType?: string;
+}) {
+  const project = projectId();
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+  const endpoint = vertexGenerateContentEndpoint(project, model, apiKey || undefined);
+
+  const contents: GeminiContent[] = [{ role: 'user', parts: [{ text: prompt }, ...parts] }];
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
   };
-  return getModel(GEMINI_MODEL, config);
-}
 
-function parseJsonResponse(text: string) {
-  const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-  return JSON.parse(cleanText);
-}
-
-function isGeminiQuotaOrBillingError(err: any) {
-  const message = String(err?.message || err || '').toLowerCase();
-  return err?.status === 429 || message.includes('prepayment credits') || message.includes('quota') || message.includes('too many requests');
-}
-
-function throwUserFacingGeminiError(err: any) {
-  if (isGeminiQuotaOrBillingError(err)) {
-    const error = new Error('Vertex AI / Gemini API credits/quota error. Please check Vertex AI billing in GCP Console.');
-    (error as any).status = 429;
-    (error as any).code = 'GEMINI_QUOTA_EXHAUSTED';
-    throw error;
+  const token = await accessToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
-  throw err;
+
+  const generationConfig: Record<string, any> = { temperature };
+  if (responseMimeType) {
+    generationConfig.responseMimeType = responseMimeType;
+  }
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      systemInstruction: system ? { parts: [{ text: system }] } : undefined,
+      contents,
+      generationConfig
+    })
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Vertex AI request failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+
+  return data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('') || '';
+}
+
+// Server-side in-memory dictionary lookup cache
+const dictCache = new Map<string, any>();
+
+// Direct Google Translation fallback for 100% translation accuracy on any German word
+async function fetchGoogleTranslation(text: string): Promise<string> {
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=de&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data[0] && data[0][0] && data[0][0][0]) {
+        return data[0][0][0];
+      }
+    }
+  } catch (e) {
+    console.warn('Google Translate endpoint error:', e);
+  }
+  return text;
 }
 
 function chunkTextBySentences(text: string, maxChars = 4500): string[] {
@@ -248,25 +155,6 @@ function chunkTextBySentences(text: string, maxChars = 4500): string[] {
 
   if (current) chunks.push(current);
   return chunks;
-}
-
-function normalizeLemmaKey(value: string) {
-  return value
-    .toLowerCase()
-    .normalize('NFKC')
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function uniqueLemmas(lemmas: ExtractedLemma[]) {
-  const seen = new Set<string>();
-  return lemmas.filter((item) => {
-    const key = `${item.type}:${normalizeLemmaKey(item.lemma)}`;
-    if (!item.lemma || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function groupCards(cards: any[], title: string) {
@@ -294,28 +182,7 @@ function groupCards(cards: any[], title: string) {
   return data;
 }
 
-// Server-side in-memory dictionary lookup cache
-const dictCache = new Map<string, any>();
-
-// Direct Google Translation fallback for 100% translation accuracy on any German word
-async function fetchGoogleTranslation(text: string): Promise<string> {
-  try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=de&tl=en&dt=t&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data[0] && data[0][0] && data[0][0][0]) {
-        return data[0][0][0];
-      }
-    }
-  } catch (e) {
-    console.warn('Google Translate endpoint error:', e);
-  }
-  return text;
-}
-
 export async function generateReadingPassage(topic: string, vocabList: string[]) {
-  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
   const prompt = `
 You are an expert German language author creating engaging reading comprehension materials for intermediate-to-advanced learners.
 Generate a real-world reading passage about "${topic}".
@@ -340,12 +207,13 @@ Return ONLY a valid JSON object with the following schema:
 `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanText);
+    const raw = await callVertexApi({
+      prompt,
+      responseMimeType: 'application/json'
+    });
+    return JSON.parse(extractJson(raw));
   } catch (err: any) {
-    console.error('Vertex AI generateReadingPassage error:', err);
+    console.error('generateReadingPassage error:', err);
     return {
       title: `Aktuelles aus ${topic}: Moderne Trends in Deutschland`,
       content: `In der heutigen Gesellschaft spielen Themen wie Digitalisierung, Umweltschutz und soziale Gerechtigkeit eine immer wichtigere Rolle. Viele Menschen bemühen sich täglich, nachhaltige Entscheidungen zu treffen und neue Technologien in ihren Alltag zu integrieren. Während einige Experten die schnellen Veränderungen als große Herausforderung betrachten, sehen andere darin fantastische Chancen für die Zukunft. Das Stadtleben verändert sich stetig, und auch auf dem Land entstehen neue Arbeitsmöglichkeiten.`,
@@ -392,7 +260,6 @@ Return ONLY a valid JSON object with the following schema:
 }
 
 export async function gradeReadingPassage(passageContent: string, questions: any[], userAnswers: Record<string, string>) {
-  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
   const prompt = `
 Grade this German reading quiz.
 Passage: "${passageContent.slice(0, 300)}..."
@@ -412,10 +279,11 @@ Return ONLY a valid JSON object with:
 `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanText);
+    const raw = await callVertexApi({
+      prompt,
+      responseMimeType: 'application/json'
+    });
+    return JSON.parse(extractJson(raw));
   } catch (err) {
     let correct = 0;
     const breakdown = questions.map(q => {
@@ -449,7 +317,6 @@ export async function lookupWordContext(word: string, contextSentence?: string) 
   }
 
   try {
-    const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
     const prompt = `
 Translate and define the German word or phrase "${word}".
 Sentence context: "${contextSentence || ''}"
@@ -466,10 +333,11 @@ Return ONLY a valid JSON object with exact schema:
 }
 `;
 
-    const result = await model.generateContent(prompt);
-    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(cleanText);
+    const raw = await callVertexApi({
+      prompt,
+      responseMimeType: 'application/json'
+    });
+    const data = JSON.parse(extractJson(raw));
 
     if (data.englishTranslation && !data.englishTranslation.includes('translation service')) {
       dictCache.set(cacheKey, data);
@@ -495,88 +363,126 @@ Return ONLY a valid JSON object with exact schema:
 }
 
 export async function extractCardsFromParagraph(rawText: string, customTitle?: string) {
+  const prompt = `
+You are a master German linguistic analyzer. Analyze the following German text paragraph in detail:
+"${rawText}"
+
+CRITICAL REQUIREMENTS:
+- Extract EVERY SINGLE verb, noun, adjective, and idiom/phrase present in this text! Do not omit anything.
+- Output MUST be a valid JSON object with 4 arrays: "verbs", "nouns", "adjectives", and "idioms".
+- For EACH item in the arrays, provide:
+  - id: unique string ID
+  - word: base dictionary form (Infinitiv for verbs, Singular for nouns, Base for adjectives, Full phrase for idioms)
+  - originalInText: exact conjugated or declined word form as it appeared in the raw text
+  - article: "der", "die", "das", or null
+  - translation: accurate English translation
+  - level: "A1", "A2", "B1", "B2", or "C1"
+  - type: "verb", "noun", "adjective", or "idiom"
+  - sentences: array of EXACTLY 5 example sentences (each having "tenseOrCase", "german", "english") showing different tenses or cases.
+
+Expected JSON Structure:
+{
+  "title": "${customTitle || 'German Paragraph Extraction'}",
+  "verbs": [
+    {
+      "id": "verb_1",
+      "word": "Infinitive",
+      "originalInText": "conjugated form in text",
+      "translation": "English translation",
+      "type": "verb",
+      "level": "B1",
+      "sentences": [
+        { "tenseOrCase": "Präsens", "german": "...", "english": "..." },
+        { "tenseOrCase": "Präteritum", "german": "...", "english": "..." },
+        { "tenseOrCase": "Perfekt", "german": "...", "english": "..." },
+        { "tenseOrCase": "Futur I", "german": "...", "english": "..." },
+        { "tenseOrCase": "Konjunktiv II", "german": "...", "english": "..." }
+      ]
+    }
+  ],
+  "nouns": [
+    {
+      "id": "noun_1",
+      "word": "Singular noun",
+      "article": "der/die/das",
+      "plural": "Plural form",
+      "originalInText": "form in text",
+      "translation": "English translation",
+      "type": "noun",
+      "level": "B1",
+      "sentences": [
+        { "tenseOrCase": "Nominativ", "german": "...", "english": "..." },
+        { "tenseOrCase": "Akkusativ", "german": "...", "english": "..." },
+        { "tenseOrCase": "Dativ", "german": "...", "english": "..." },
+        { "tenseOrCase": "Genitiv", "german": "...", "english": "..." },
+        { "tenseOrCase": "Plural", "german": "...", "english": "..." }
+      ]
+    }
+  ],
+  "adjectives": [
+    {
+      "id": "adj_1",
+      "word": "Base adjective",
+      "originalInText": "form in text",
+      "translation": "English translation",
+      "type": "adjective",
+      "level": "A2",
+      "sentences": [
+        { "tenseOrCase": "Positiv", "german": "...", "english": "..." },
+        { "tenseOrCase": "Komparativ", "german": "...", "english": "..." },
+        { "tenseOrCase": "Superlativ", "german": "...", "english": "..." },
+        { "tenseOrCase": "Prädikativ", "german": "...", "english": "..." },
+        { "tenseOrCase": "Attributiv", "german": "...", "english": "..." }
+      ]
+    }
+  ],
+  "idioms": [
+    {
+      "id": "idiom_1",
+      "word": "Phrase / Idiom",
+      "originalInText": "form in text",
+      "translation": "English meaning",
+      "type": "idiom",
+      "level": "B2",
+      "sentences": [
+        { "tenseOrCase": "Beispiel 1", "german": "...", "english": "..." },
+        { "tenseOrCase": "Beispiel 2", "german": "...", "english": "..." },
+        { "tenseOrCase": "Beispiel 3", "german": "...", "english": "..." },
+        { "tenseOrCase": "Beispiel 4", "german": "...", "english": "..." },
+        { "tenseOrCase": "Beispiel 5", "german": "...", "english": "..." }
+      ]
+    }
+  ]
+}
+`;
+
   try {
-    const title = customTitle || 'German Paragraph Extraction';
-    const chunks = chunkTextBySentences(rawText);
-    const extractor = makeJsonModel(extractionListSchema);
-    const allLemmas: ExtractedLemma[] = [];
+    const raw = await callVertexApi({
+      prompt,
+      responseMimeType: 'application/json'
+    });
+    const data = JSON.parse(extractJson(raw));
 
-    for (const [index, chunk] of chunks.entries()) {
-      const prompt = `
-You are a strict German linguistic extractor.
-Extract lemmas that actually appear in this German text chunk. Do not invent words.
+    const timestamp = Date.now();
+    ['verbs', 'nouns', 'adjectives', 'idioms'].forEach((cat) => {
+      if (Array.isArray(data[cat])) {
+        data[cat] = data[cat].map((item: any, idx: number) => ({
+          ...item,
+          id: item.id || `p_${cat[0]}_${timestamp}_${idx}`
+        }));
+      } else {
+        data[cat] = [];
+      }
+    });
 
-Rules:
-- Include every lexical verb, noun, adjective, and fixed idiom/phrase in this chunk.
-- Normalize verbs to infinitive, nouns to singular nominative, adjectives to base positive form.
-- Exclude purely grammatical helper words, names, punctuation, numbers, articles, pronouns, determiners, conjunctions, and prepositions.
-- originalInText must be the exact form from the text.
-- Return empty arrays for categories that are not present.
-
-Chunk ${index + 1} of ${chunks.length}:
-${chunk}
-`;
-
-      const result = await extractor.generateContent(prompt);
-      const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
-      const parsed = parseJsonResponse(text);
-
-      (['verbs', 'nouns', 'adjectives', 'idioms'] as VocabCategory[]).forEach((category) => {
-        const type = category === 'verbs' ? 'verb' : category === 'nouns' ? 'noun' : category === 'adjectives' ? 'adjective' : 'idiom';
-        const items = Array.isArray(parsed[category]) ? parsed[category] : [];
-        items.forEach((item: any) => {
-          allLemmas.push({
-            lemma: String(item.lemma || '').trim(),
-            originalInText: String(item.originalInText || item.lemma || '').trim(),
-            article: item.article || null,
-            plural: item.plural || null,
-            translation: String(item.translation || '').trim(),
-            level: item.level || 'B1',
-            type
-          });
-        });
-      });
-    }
-
-    const lemmas = uniqueLemmas(allLemmas);
-    const cards: any[] = [];
-    const cardGenerator = makeJsonModel(cardBatchSchema);
-
-    for (let i = 0; i < lemmas.length; i += 10) {
-      const batch = lemmas.slice(i, i + 10);
-      const prompt = `
-Create complete German learning flashcards for these extracted vocabulary items.
-Use only the provided item list; do not add unrelated words.
-
-For every item:
-- word is the lemma.
-- originalInText must stay exactly as provided.
-- Create exactly 5 sentence objects.
-- For verbs, include tenses: Praesens, Praeteritum, Perfekt, Futur I, Konjunktiv II, plus conjugation.
-- For nouns, include cases: Nominativ, Akkusativ, Dativ, Genitiv, Plural, plus article, plural, and declension.
-- For adjectives, include: Positiv, Komparativ, Superlativ, Praedikativ, Attributiv.
-- For idioms, include five natural examples.
-- German sentences must be natural and useful for a German learner; English translations must be accurate.
-
-Items:
-${JSON.stringify(batch)}
-`;
-
-      const result = await cardGenerator.generateContent(prompt);
-      const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
-      const parsed = parseJsonResponse(text);
-      if (Array.isArray(parsed.cards)) cards.push(...parsed.cards);
-    }
-
-    return groupCards(cards, title);
+    return data;
   } catch (err: any) {
     console.error('extractCardsFromParagraph error:', err);
-    throwUserFacingGeminiError(err);
+    throw err;
   }
 }
 
 export async function chatWithBot(userMessage: string, selectedWord?: string) {
-  const model = getModel(GEMINI_MODEL, maxGenConfig);
   const prompt = `
 You are "DeutschMeister AI Tutor", an intelligent German language teacher.
 User Message: "${userMessage}"
@@ -586,14 +492,13 @@ Respond directly in friendly German with English translations for complex phrase
 `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const responseText = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+    const responseText = await callVertexApi({ prompt });
     if (responseText && responseText.trim().length > 0) {
       return responseText.trim();
     }
     throw new Error('Empty response');
   } catch (err: any) {
-    console.error('Vertex AI chatWithBot error:', err);
+    console.error('chatWithBot error:', err);
     return `Sehr gerne! Zu deiner Frage: "${userMessage}". Ich helfe dir dabei, die deutsche Grammatik und den Wortschatz Schritt für Schritt zu meistern.`;
   }
 }
@@ -632,8 +537,6 @@ export async function chatWithCallAgent({
   persona?: CallPersona;
   customSystemPrompt?: string;
 }) {
-  const model = getModel(GEMINI_MODEL, maxGenConfig);
-
   const prompt = `
 You are the voice call AI tutor inside DeutschMeister.
 You must speak in natural spoken German for speech synthesis. Keep answers short (1-3 sentences).
@@ -652,18 +555,16 @@ Tutor:
 `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
+    const text = await callVertexApi({ prompt });
     return text.trim();
   } catch (err: any) {
-    console.error('Vertex AI chatWithCallAgent error:', err);
+    console.error('chatWithCallAgent error:', err);
     return 'Hallo! Ich habe dich verstanden. Wie moechtest du weiterueben?';
   }
 }
 
 export async function summarizeConversationMemory(messageHistory: { sender: 'user' | 'bot'; text: string }[]) {
   if (!messageHistory || messageHistory.length < 6) return '';
-  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
 
   const prompt = `
 Summarize the key facts about the German learner from this call history into a concise 2-3 sentence memory string in English.
@@ -676,9 +577,8 @@ Return JSON: { "summary": "Concise summary string" }
 `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
-    const data = parseJsonResponse(text);
+    const raw = await callVertexApi({ prompt, responseMimeType: 'application/json' });
+    const data = JSON.parse(extractJson(raw));
     return data.summary || '';
   } catch {
     return '';
@@ -686,7 +586,6 @@ Return JSON: { "summary": "Concise summary string" }
 }
 
 export async function gradeWritingSubmission(promptEnglish: string, userGermanText: string) {
-  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
   const prompt = `
 You are a German language teacher grading a student's writing exercise.
 Prompt: "${promptEnglish}"
@@ -706,10 +605,8 @@ Return ONLY a valid JSON object with:
 `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanText);
+    const raw = await callVertexApi({ prompt, responseMimeType: 'application/json' });
+    return JSON.parse(extractJson(raw));
   } catch (err) {
     return {
       score: 85,
@@ -723,7 +620,6 @@ Return ONLY a valid JSON object with:
 }
 
 export async function generateListeningDialogueAndQuiz(topic: string) {
-  const model = getModel(GEMINI_MODEL, jsonMaxGenConfig);
   const prompt = `
 Generate a natural 2-person German audio conversation dialogue about "${topic}".
 Then generate exactly 15 multiple-choice questions testing comprehension of this dialogue.
@@ -748,10 +644,8 @@ Return ONLY a valid JSON object with schema:
 `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = (result.response as any).text ? (result.response as any).text() : JSON.stringify(result.response);
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanText);
+    const raw = await callVertexApi({ prompt, responseMimeType: 'application/json' });
+    return JSON.parse(extractJson(raw));
   } catch (err) {
     const fallbackQuestions = Array.from({ length: 15 }, (_, i) => ({
       id: i + 1,
