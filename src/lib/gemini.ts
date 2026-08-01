@@ -22,8 +22,8 @@ function vertexHost() {
   return region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`;
 }
 
-export const VERTEX_GEMINI_MODEL = process.env.VERTEX_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-export const VERTEX_GEMINI_FAST_MODEL = process.env.VERTEX_GEMINI_FAST_MODEL || 'gemini-2.5-flash-lite';
+export const VERTEX_GEMINI_MODEL = process.env.VERTEX_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+export const VERTEX_GEMINI_FAST_MODEL = process.env.VERTEX_GEMINI_FAST_MODEL || 'gemini-3.5-flash-lite';
 
 async function accessToken() {
   const configured = process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
