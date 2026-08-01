@@ -456,7 +456,8 @@ You are a master German linguistic analyzer. Analyze the following German text p
 "${rawText}"
 
 CRITICAL REQUIREMENTS:
-- Extract EVERY SINGLE verb, noun, adjective, and idiom/phrase present in this text! Do not omit anything.
+- Extract a curated list of up to 4 key verbs, 4 key nouns, 4 key adjectives, and 2 key idioms/phrases present in this text that are most valuable for intermediate-to-advanced learners.
+- Do NOT extract every single word; keep the total number of items extracted across all categories to a maximum of 12 highly relevant words/phrases to ensure extremely high content quality.
 - Output MUST be a valid JSON object with 4 arrays: "verbs", "nouns", "adjectives", and "idioms".
 - For EACH item in the arrays, provide:
   - id: unique string ID
