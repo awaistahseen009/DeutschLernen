@@ -1,8 +1,38 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
 
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const genAI = new GoogleGenerativeAI(apiKey);
+const geminiApiKeys = Array.from(new Set([
+  process.env.GEMINI_API_KEY,
+  process.env.GOOGLE_API_KEY
+].map((key) => key?.trim()).filter(Boolean))) as string[];
+
+const geminiClients = geminiApiKeys.length > 0
+  ? geminiApiKeys.map((key) => new GoogleGenerativeAI(key))
+  : [new GoogleGenerativeAI('')];
+
+const genAI = {
+  getGenerativeModel(params: any) {
+    const models = geminiClients.map((client) => client.getGenerativeModel(params));
+    return {
+      generateContent: async (...args: any[]) => {
+        let lastError: any;
+        for (let i = 0; i < models.length; i++) {
+          try {
+            return await (models[i].generateContent as any)(...args);
+          } catch (err: any) {
+            lastError = err;
+            if (isGeminiQuotaOrBillingError(err) && i < models.length - 1) {
+              console.warn(`Gemini key ${i + 1} hit quota/billing limit. Trying next configured key.`);
+              continue;
+            }
+            throw err;
+          }
+        }
+        throw lastError;
+      }
+    };
+  }
+};
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
 // Unlimited generation config without any maxOutputTokens parameter
@@ -184,6 +214,21 @@ function makeJsonModel(responseSchema?: any) {
 function parseJsonResponse(text: string) {
   const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
   return JSON.parse(cleanText);
+}
+
+function isGeminiQuotaOrBillingError(err: any) {
+  const message = String(err?.message || err || '').toLowerCase();
+  return err?.status === 429 || message.includes('prepayment credits') || message.includes('quota') || message.includes('too many requests');
+}
+
+function throwUserFacingGeminiError(err: any) {
+  if (isGeminiQuotaOrBillingError(err)) {
+    const error = new Error('Gemini API credits/quota are exhausted. Please add credits in Google AI Studio billing, then try again.');
+    (error as any).status = 429;
+    (error as any).code = 'GEMINI_QUOTA_EXHAUSTED';
+    throw error;
+  }
+  throw err;
 }
 
 function chunkTextBySentences(text: string, maxChars = 4500): string[] {
@@ -525,13 +570,7 @@ ${JSON.stringify(batch)}
     return groupCards(cards, title);
   } catch (err: any) {
     console.error('extractCardsFromParagraph error:', err);
-    return {
-      title: customTitle || 'Deutscher Text Extrakt',
-      verbs: [],
-      nouns: [],
-      adjectives: [],
-      idioms: []
-    };
+    throwUserFacingGeminiError(err);
   }
 }
 

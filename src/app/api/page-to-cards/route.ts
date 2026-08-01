@@ -6,6 +6,12 @@ import jwt from 'jsonwebtoken';
 
 export const dynamic = 'force-dynamic';
 
+function countExtractedCards(result: any) {
+  return ['verbs', 'nouns', 'adjectives', 'idioms'].reduce((total, key) => {
+    return total + (Array.isArray(result?.[key]) ? result[key].length : 0);
+  }, 0);
+}
+
 export async function POST(request: Request) {
   try {
     const { rawText, customTitle } = await request.json();
@@ -28,6 +34,13 @@ export async function POST(request: Request) {
     // Call Gemini to extract verbs, nouns, adjectives, and idioms
     const result = await extractCardsFromParagraph(rawText, customTitle);
 
+    if (countExtractedCards(result) === 0) {
+      return NextResponse.json(
+        { error: 'Gemini did not return any extractable cards. No project was saved.' },
+        { status: 422 }
+      );
+    }
+
     // Ensure PostgreSQL table exists and save text project
     await initDbSchema();
     const dbRes = await query(
@@ -46,7 +59,8 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     console.error('Page to cards API POST error:', err);
-    return NextResponse.json({ error: err.message || 'Verarbeitung fehlgeschlagen' }, { status: 500 });
+    const status = err.status === 429 ? 429 : 500;
+    return NextResponse.json({ error: err.message || 'Verarbeitung fehlgeschlagen', code: err.code }, { status });
   }
 }
 
