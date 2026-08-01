@@ -94,6 +94,8 @@ async function callVertexApi({
     generationConfig.responseMimeType = responseMimeType;
   }
 
+  console.log(`[Vertex AI] Executing request on project=${project}, model=${model}, endpoint=${endpoint}`);
+
   const res = await fetch(endpoint, {
     method: 'POST',
     headers,
