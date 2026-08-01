@@ -4,14 +4,11 @@ import { fetchFullYoutubeTranscript } from '@/lib/youtubeTranscript';
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// Max generation config with no artificial limits (8192 max tokens output)
-const maxGenConfig = {
-  maxOutputTokens: 8192
-};
+// Unlimited generation config without any maxOutputTokens parameter
+const maxGenConfig = {};
 
 const jsonMaxGenConfig = {
-  responseMimeType: 'application/json',
-  maxOutputTokens: 8192
+  responseMimeType: 'application/json'
 };
 
 // Server-side in-memory dictionary lookup cache
